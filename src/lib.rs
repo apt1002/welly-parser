@@ -1,6 +1,12 @@
 use std::{io};
 use io::{BufRead, Write};
 
+mod error;
+pub use error::{Location, Error, Result};
+
+mod parser;
+pub use parser::{Token, Stream};
+
 pub fn echo<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<()> {
     let mut line = String::new();
     loop {
