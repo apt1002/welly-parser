@@ -1,4 +1,4 @@
-use std::{fmt, io};
+use std::{fmt};
 use std::ops::{Range};
 
 /// A position in source code in a form that can be reported to the user.
@@ -39,30 +39,15 @@ impl From<Range<usize>> for Location {
 
 // ----------------------------------------------------------------------------
 
-/// Represents an error message referring to a position in source code.
-#[derive(Debug)]
-pub enum Error {
-    /// No more input.
-    End,
-    /// An I/O error.
-    IO(io::Error),
-    /// A syntax error.
-    Syntax(String, Location),
+/// Indicates that a parser needs more input.
+#[derive(Debug, Copy, Clone)]
+pub struct Incomplete;
+
+impl fmt::Display for Incomplete {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.write_str("End of file") }
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::End => { f.write_str("End of file") },
-            Self::IO(error) => { error.fmt(f) },
-            Self::Syntax(msg, _) => { f.write_str(msg) }
-        }
-    }
-}
-
-impl std::error::Error for Error {}
-
-// ----------------------------------------------------------------------------
+impl std::error::Error for Incomplete {}
 
 /// Return type of a function that parses a `T`.
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Incomplete>;

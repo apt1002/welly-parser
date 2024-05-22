@@ -2,7 +2,7 @@ use std::{io};
 use io::{BufRead, Write};
 
 mod error;
-pub use error::{Location, Error, Result};
+pub use error::{Location, Incomplete, Result};
 
 mod parser;
 pub use parser::{Token, Stream};

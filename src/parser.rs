@@ -1,81 +1,91 @@
-use std::{io};
-use io::{Read};
-use std::ops::{Range};
-use super::{Location, Error, Result};
+use super::{Location, Result};
 
 // ----------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
-pub struct Token<T> {
-    pub loc: Location,
-    pub token: T,
+pub enum Token<T> {
+    /// A successfully parsed token.
+    Token(Location, T),
+
+    /// A syntax error.
+    Syntax(Location, String),
 }
 
 // ----------------------------------------------------------------------------
 
-pub trait Stream<T> {
+/// A peekable stream of [`Self::Item`]s.
+///
+/// This is similar to an [`Iterator`], except:
+/// - It has a `peek()` method.
+/// - Its [`Self::Item`]s have [`Location`]s.
+/// - It represents the end of the stream using [`Error::End`].
+/// - It can return other errors.
+///
+/// [`Error::End`]: super::Error::End
+pub trait Stream {
+    /// The type of items produced by this `Stream`.
+    type Item;
+
     /// Returns the next `T`, if any, without consuming it.
     /// The next call to `take` will return the same value.
-    fn peek(&mut self) -> Result<&T>;
+    fn peek(&mut self) -> Result<&Token<Self::Item>>;
 
     /// Consumes and returns the next `T`, if any.
-    fn take(&mut self) -> Result<Token<T>>;
+    fn take(&mut self) -> Result<Token<Self::Item>>;
+}
+
+impl<'a, S> Stream for &'a mut S where S: Stream {
+    type Item = S::Item;
+    fn peek(&mut self) -> Result<&Token<Self::Item>> { (*self).peek() }
+    fn take(&mut self) -> Result<Token<Self::Item>> { (*self).take() }
 }
 
 // ----------------------------------------------------------------------------
 
-pub struct Bytes<R: Read> {
-    /// The underlying `Read`.
-    input: R,
-    /// The part of `buf` holding the remaining bytes from the latest `read()`.
-    buf_range: Range<usize>,
-    /// The total length of all previous `read()`s (not including the latest).
-    stream_index: usize,
-    /// Used to `read()`. `buf[buf_range]` is meaningful.
-    buf: [u8; 0x1000],
+/// Parse [`Self`] into [`Self::Output`]s.
+pub trait Parse: Stream {
+    /// The type of token produced by [`parse()`].
+    type Output;
+
+    /// Read input tokens from `Self` and try to make a `Self::Output`.
+    ///
+    /// There are three possible return values:
+    /// - `Err(Incomplete)` indicates that not enough input is available.
+    /// - `Ok(Token::Token(_, t))` indicates a successful parse with result `t`.
+    /// - `Ok(Token::Syntax(_, e))` indicates an unsuccessful parse with error `e`.
+    ///   This is also used at the end of the input, if there is no possibility
+    ///   of more input becoming available.
+    fn parse(&mut self) -> Result<Token<Self::Output>>;
 }
 
-impl<R: Read> Bytes<R> {
-    fn new(input: R) -> Self {
-        Bytes {
-            input,
-            buf_range: 0..0,
-            stream_index: 0,
-            buf: [0; 0x1000],
-        }
-    }
+// ----------------------------------------------------------------------------
 
-    /// If `buf_range` is empty, calls `read()` until it is not interrupted.
-    /// Returns `Ok` if it manages to make `buf_range` non-empty.
-    fn fill(&mut self) -> Result<()> {
-        if !self.buf_range.is_empty() { return Ok(()); }
-        self.stream_index += self.buf_range.end;
-        loop { match self.input.read(&mut self.buf) {
-            Ok(size) => {
-                if size == 0 { return Err(Error::End); }
-                self.buf_range = 0..size;
-                return Ok(());
-            },
-            Err(error) => {
-                if !matches!(error.kind(), io::ErrorKind::Interrupted) {
-                    return Err(Error::IO(error));
-                }
-            },
-        }}
+/// A [`Stream`] that generates items by calling [`Parse::parse()`] on an input
+/// `Stream`.
+pub struct ParseStream<P: Parse> {
+    /// The input stream.
+    input: P,
+
+    /// The next output token, if it has been parsed.
+    next: Option<Token<P::Output>>,
+}
+
+impl<P: Parse> ParseStream<P> {
+    fn new(input: P) -> Self { Self {input, next: None} }
+
+    /// Generate the next output token, if necessary and possible, and return
+    /// `&mut self.next`.
+    ///
+    /// If this method returns [`Ok`], [`self.next`] is guaranteed to be
+    /// an [`Option::Some`].
+    fn next(&mut self) -> Result<&mut Option<Token<P::Output>>> {
+        if self.next.is_none() { self.next = Some(self.input.parse()?); }
+        Ok(&mut self.next)
     }
 }
 
-impl<R: Read> Stream<u8> for Bytes<R> {
-    fn peek(&mut self) -> Result<&u8> {
-        self.fill()?;
-        Ok(&self.buf[self.buf_range.start])
-    }
-
-    fn take(&mut self) -> Result<Token<u8>> {
-        self.fill()?;
-        let buf_index = self.buf_range.next().unwrap();
-        let loc = Location::from(self.stream_index + buf_index);
-        let token = self.buf[buf_index];
-        Ok(Token {loc, token})
-    }
+impl<P: Parse> Stream for ParseStream<P> {
+    type Item = P::Output;
+    fn peek(&mut self) -> Result<&Token<Self::Item>> { Ok(self.next()?.as_ref().unwrap()) }
+    fn take(&mut self) -> Result<Token<Self::Item>> { Ok(self.next()?.take().unwrap()) }
 }
