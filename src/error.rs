@@ -1,4 +1,3 @@
-use std::{fmt};
 use std::ops::{Range};
 
 /// A position in source code in a form that can be reported to the user.
@@ -36,18 +35,3 @@ impl From<(usize, usize)> for Location {
 impl From<Range<usize>> for Location {
     fn from(value: Range<usize>) -> Self { Self {start: value.start, end: value.end} }
 }
-
-// ----------------------------------------------------------------------------
-
-/// Indicates that a parser needs more input.
-#[derive(Debug, Copy, Clone)]
-pub struct Incomplete;
-
-impl fmt::Display for Incomplete {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.write_str("End of file") }
-}
-
-impl std::error::Error for Incomplete {}
-
-/// Return type of a function that parses a `T`.
-pub type Result<T> = std::result::Result<T, Incomplete>;

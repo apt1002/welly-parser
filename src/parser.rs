@@ -1,91 +1,50 @@
-use super::{Location, Result};
+use std::iter::{Peekable};
+use super::{Location};
+
+/// Represents a parse tree of type `T` or a parse error, with a [`Location`].
+pub type Token<T> = (Location, Result<T, String>);
 
 // ----------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
-pub enum Token<T> {
-    /// A successfully parsed token.
-    Token(Location, T),
+/// Parse a `Self` from a stream of [`Self::Input`]s.
+pub trait Parse: Sized {
+    /// The type of the input tokens.
+    type Input;
 
-    /// A syntax error.
-    Syntax(Location, String),
-}
-
-// ----------------------------------------------------------------------------
-
-/// A peekable stream of [`Self::Item`]s.
-///
-/// This is similar to an [`Iterator`], except:
-/// - It has a `peek()` method.
-/// - Its [`Self::Item`]s have [`Location`]s.
-/// - It represents the end of the stream using [`Error::End`].
-/// - It can return other errors.
-///
-/// [`Error::End`]: super::Error::End
-pub trait Stream {
-    /// The type of items produced by this `Stream`.
-    type Item;
-
-    /// Returns the next `T`, if any, without consuming it.
-    /// The next call to `take` will return the same value.
-    fn peek(&mut self) -> Result<&Token<Self::Item>>;
-
-    /// Consumes and returns the next `T`, if any.
-    fn take(&mut self) -> Result<Token<Self::Item>>;
-}
-
-impl<'a, S> Stream for &'a mut S where S: Stream {
-    type Item = S::Item;
-    fn peek(&mut self) -> Result<&Token<Self::Item>> { (*self).peek() }
-    fn take(&mut self) -> Result<Token<Self::Item>> { (*self).take() }
-}
-
-// ----------------------------------------------------------------------------
-
-/// Parse [`Self`] into [`Self::Output`]s.
-pub trait Parse: Stream {
-    /// The type of token produced by [`parse()`].
+    /// The type of the output tokens.
     type Output;
 
-    /// Read input tokens from `Self` and try to make a `Self::Output`.
+    /// Read input tokens from `input` and try to make a `Self::Output`.
     ///
     /// There are three possible return values:
-    /// - `Err(Incomplete)` indicates that not enough input is available.
-    /// - `Ok(Token::Token(_, t))` indicates a successful parse with result `t`.
-    /// - `Ok(Token::Syntax(_, e))` indicates an unsuccessful parse with error `e`.
+    /// - `None` indicates that not enough input is available.
+    /// - `Some(_, Ok(t))` indicates a successful parse with result `t`.
+    /// - `Some(_, Err(e))` indicates an unsuccessful parse with error `e`.
     ///   This is also used at the end of the input, if there is no possibility
     ///   of more input becoming available.
-    fn parse(&mut self) -> Result<Token<Self::Output>>;
-}
-
-// ----------------------------------------------------------------------------
-
-/// A [`Stream`] that generates items by calling [`Parse::parse()`] on an input
-/// `Stream`.
-pub struct ParseStream<P: Parse> {
-    /// The input stream.
-    input: P,
-
-    /// The next output token, if it has been parsed.
-    next: Option<Token<P::Output>>,
-}
-
-impl<P: Parse> ParseStream<P> {
-    fn new(input: P) -> Self { Self {input, next: None} }
-
-    /// Generate the next output token, if necessary and possible, and return
-    /// `&mut self.next`.
     ///
-    /// If this method returns [`Ok`], [`self.next`] is guaranteed to be
-    /// an [`Option::Some`].
-    fn next(&mut self) -> Result<&mut Option<Token<P::Output>>> {
-        if self.next.is_none() { self.next = Some(self.input.parse()?); }
-        Ok(&mut self.next)
+    /// In all cases, items will be irreversibly read from `input`. You may
+    /// therefore wish to clone `input` before calling this method.
+    fn parse<I: Iterator<Item=Self::Input>>(&self, input: &mut Peekable<I>) -> Option<Token<Self::Output>>;
+
+    /// Parse a stream of [`Self::Input`] into a stream of [`Self::Output`].
+    fn iter<I: Iterator<Item=Self::Input>>(self, input: I) -> Parser<Self, I> {
+        Parser {parse: self, input: input.peekable()}
     }
 }
 
-impl<P: Parse> Stream for ParseStream<P> {
-    type Item = P::Output;
-    fn peek(&mut self) -> Result<&Token<Self::Item>> { Ok(self.next()?.as_ref().unwrap()) }
-    fn take(&mut self) -> Result<Token<Self::Item>> { Ok(self.next()?.take().unwrap()) }
+// ----------------------------------------------------------------------------
+
+/// An [`Iterator`] that generates items by calling [`Parse::parse()`].
+pub struct Parser<P: Parse, I: Iterator<Item=P::Input>> {
+    /// The parsing function.
+    parse: P,
+
+    /// The input stream.
+    input: Peekable<I>,
+}
+
+impl<P: Parse, I: Iterator<Item=P::Input>> Iterator for Parser<P, I> {
+    type Item = Token<P::Output>;
+    fn next(&mut self) -> Option<Self::Item> { self.parse.parse(&mut self.input) }
 }
