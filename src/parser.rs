@@ -14,7 +14,7 @@ pub struct Location {
 
 impl Location {
     /// Returns the smallest `Location` containing all
-    fn union(pieces: &[Self]) -> Self {
+    pub fn union(pieces: &[Self]) -> Self {
         let mut pieces = pieces.iter().copied();
         let mut ret = pieces.next().expect("Cannot form the union of no pieces");
         while let Some(piece) = pieces.next() {

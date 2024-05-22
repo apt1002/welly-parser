@@ -5,6 +5,7 @@ mod parser;
 pub use parser::{Location, Token};
 
 mod buffer;
+pub use buffer::{Buffer};
 
 pub fn echo<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<()> {
     let mut line = String::new();

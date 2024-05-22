@@ -25,17 +25,17 @@ impl Buffer {
     }
 
     /// Returns the suffix of [`self.source`] that has not yet been parsed.
-    fn remainder(&self) -> &str { &self.source[self.index..] }
+    pub fn remainder(&self) -> &str { &self.source[self.index..] }
 
     /// Parse and throw away a whitespace string.
-    fn skip_whitespace(&mut self) {
+    pub fn skip_whitespace(&mut self) {
         self.try_parse(|_cs: &mut Characters| Some(()));
     }
 
     /// Parse and return a [`Token<Statement>`].
     ///
     /// [`Location`]s in the `Token` are relative to [`self.index`] on entry.
-    fn parse(&mut self) -> Option<Token<Statement>> {
+    pub fn parse(&mut self) -> Option<Token<Statement>> {
         self.try_parse(|cs: &mut Characters| cs.next())
     }
 }
