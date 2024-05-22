@@ -1,11 +1,8 @@
 use std::{io};
 use io::{BufRead, Write};
 
-mod error;
-pub use error::{Location};
-
 mod parser;
-pub use parser::{Token};
+pub use parser::{Location, Token};
 
 mod buffer;
 
