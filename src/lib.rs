@@ -7,6 +7,8 @@ pub use error::{Location, Incomplete, Result};
 mod parser;
 pub use parser::{Token, Stream};
 
+mod buffer;
+
 pub fn echo<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<()> {
     let mut line = String::new();
     loop {
