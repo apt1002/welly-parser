@@ -2,7 +2,7 @@ use std::{io};
 use io::{BufRead, Write};
 
 mod parser;
-pub use parser::{Location, Token, Parse};
+pub use parser::{Location, Token, UndoIterator, Parse};
 
 mod buffer;
 pub use buffer::{Buffer};

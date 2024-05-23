@@ -1,5 +1,4 @@
-use std::iter::{Peekable};
-use super::{Location, Token, Parse};
+use super::{Location, Token, UndoIterator, Parse};
 
 pub enum AST {
     Char(char),
@@ -26,7 +25,7 @@ impl Parser {
         &self,
         _start: Location,
         _loc_x: Location,
-        _input: &mut Peekable<I>,
+        _input: &mut UndoIterator<I>,
     ) -> Option<Token<AST>> {
         todo!()
     }
@@ -36,27 +35,28 @@ impl Parse for Parser {
     type Input = char;
     type Output = AST;
 
-    fn parse<I: Iterator<Item=Token<Self::Input>>>(&self, input: &mut Peekable<I>) -> Option<Token<Self::Output>> {
+    fn parse<
+        I: Iterator<Item=Token<Self::Input>>,
+    >(&self, input: &mut UndoIterator<I>) -> Option<Token<Self::Output>> {
         let start = match input.next() {
             Some(Token(loc, Ok('\\'))) => loc,
             other => { return other.map(Token::into); },
         };
         // We've read a backslash.
-        match input.peek() {
-            Some(&Token(loc, Ok('0'))) => {
-                input.next();
+        input.next().and_then(|token| match token {
+            Token(loc, Ok('0')) => {
                 Some(Token::compound([start, loc], '\0'))
             },
-            Some(&Token(loc, Ok('x'))) => {
-                input.next();
+            Token(loc, Ok('x')) => {
                 self.backslash_x(start, loc, input)
             },
-            Some(&Token(_, Ok(_))) => Some(Token::error([start], MISSING_SEQUENCE)),
-            Some(&Token(_, Err(_))) => {
-                let Token(loc, e) = input.next().unwrap();
-                Some(Token(loc, Err(e.unwrap_err())))
+            Token(_, Ok(_)) => {
+                input.undo(token);
+                Some(Token::error([start], MISSING_SEQUENCE))
             },
-            None => None,
-        }
+            Token(loc, Err(e)) => {
+                Some(Token(loc, Err(e)))
+            },
+        })
     }
 }
