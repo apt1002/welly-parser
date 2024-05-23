@@ -14,8 +14,8 @@ pub struct Location {
 
 impl Location {
     /// Returns the smallest `Location` containing all
-    pub fn union(pieces: &[Self]) -> Self {
-        let mut pieces = pieces.iter().copied();
+    pub fn union(pieces: impl IntoIterator<Item=Self>) -> Self {
+        let mut pieces = pieces.into_iter();
         let mut ret = pieces.next().expect("Cannot form the union of no pieces");
         while let Some(piece) = pieces.next() {
             ret.start = std::cmp::min(ret.start, piece.start);
@@ -40,7 +40,26 @@ impl From<Range<usize>> for Location {
 // ----------------------------------------------------------------------------
 
 /// Represents a parse tree of type `T` or a parse error, with a [`Location`].
-pub type Token<T> = (Location, Result<T, String>);
+pub struct Token<T>(pub Location, pub Result<T, String>);
+
+impl<T> Token<T> {
+    /// Constructs `Self` typically out of smaller `Token`s.
+    pub fn compound(locs: impl IntoIterator<Item=Location>, t: impl Into<T>) -> Self {
+        Token(Location::union(locs), Ok(t.into()))
+    }
+
+    /// Constructs `Self` from a [`Location`] and an error message.
+    pub fn error(locs: impl IntoIterator<Item=Location>, e: &str) -> Self {
+        Token(Location::union(locs), Err(e.into()))
+    }
+
+    /// Preserves the [`Location`] and any error, but applies `f` to a token.
+    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Token<U> {
+        Token(self.0, self.1.map(f))
+    }
+
+    pub fn into<U>(self) -> Token<U> where T: Into<U> { self.map(T::into) }
+}
 
 // ----------------------------------------------------------------------------
 
@@ -63,10 +82,10 @@ pub trait Parse: Sized {
     ///
     /// In all cases, items will be irreversibly read from `input`. You may
     /// therefore wish to clone `input` before calling this method.
-    fn parse<I: Iterator<Item=Self::Input>>(&self, input: &mut Peekable<I>) -> Option<Token<Self::Output>>;
+    fn parse<I: Iterator<Item=Token<Self::Input>>>(&self, input: &mut Peekable<I>) -> Option<Token<Self::Output>>;
 
     /// Parse a stream of [`Self::Input`] into a stream of [`Self::Output`].
-    fn iter<I: Iterator<Item=Self::Input>>(self, input: I) -> Parser<Self, I> {
+    fn iter<I: Iterator<Item=Token<Self::Input>>>(self, input: I) -> Parser<Self, I> {
         Parser {parse: self, input: input.peekable()}
     }
 }
@@ -74,7 +93,7 @@ pub trait Parse: Sized {
 // ----------------------------------------------------------------------------
 
 /// An [`Iterator`] that generates items by calling [`Parse::parse()`].
-pub struct Parser<P: Parse, I: Iterator<Item=P::Input>> {
+pub struct Parser<P: Parse, I: Iterator<Item=Token<P::Input>>> {
     /// The parsing function.
     parse: P,
 
@@ -82,7 +101,7 @@ pub struct Parser<P: Parse, I: Iterator<Item=P::Input>> {
     input: Peekable<I>,
 }
 
-impl<P: Parse, I: Iterator<Item=P::Input>> Iterator for Parser<P, I> {
+impl<P: Parse, I: Iterator<Item=Token<P::Input>>> Iterator for Parser<P, I> {
     type Item = Token<P::Output>;
     fn next(&mut self) -> Option<Self::Item> { self.parse.parse(&mut self.input) }
 }

@@ -70,7 +70,7 @@ impl<'a> Iterator for Characters<'a> {
         let start = self.index();
         let c = self.chars.next();
         let end = self.index();
-        c.map(|c| (Location::from(start..end), Ok(c)))
+        c.map(|c| Token(Location::from(start..end), Ok(c)))
     }
 }
 
