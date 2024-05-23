@@ -1,8 +1,11 @@
 use std::{io};
 use io::{BufRead, Write};
 
+mod util;
+pub use util::{UndoIterator};
+
 mod parser;
-pub use parser::{Location, Token, UndoIterator, Parse};
+pub use parser::{Location, Token, Parse};
 
 mod buffer;
 pub use buffer::{Buffer};
