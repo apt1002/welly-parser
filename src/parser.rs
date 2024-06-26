@@ -7,9 +7,9 @@ use super::{UndoIterator};
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Location {
     /// The byte index where this `Location` begins.
-    start: usize,
+    pub start: usize,
     /// The byte index following this `Location`.
-    end: usize,
+    pub end: usize,
 }
 
 impl Location {

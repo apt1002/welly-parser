@@ -16,11 +16,11 @@ impl Buffer {
     /// unchanged if `parse` returns [`None`]
     fn try_parse<T>(
         &mut self,
-        parse: impl FnOnce(&mut Characters) -> Option<T>,
-    ) -> Option<T> {
+        parse: impl FnOnce(&mut Characters) -> Option<Token<T>>,
+    ) -> Option<Token<T>> {
         let mut stream = Characters::new(self.remainder());
         let ret = parse(&mut stream);
-        if ret.is_some() { self.index += stream.index(); }
+        if let Some(Token(location, _)) = ret { self.index += location.end; }
         ret
     }
 
@@ -29,13 +29,15 @@ impl Buffer {
 
     /// Parse and throw away a whitespace string.
     pub fn skip_whitespace(&mut self) {
-        self.try_parse(|_cs: &mut Characters| Some(()));
+        // TODO.
+        self.try_parse(|_cs: &mut Characters| Some(Token(Location::from(0), Ok(()))));
     }
 
     /// Parse and return a [`Token<Statement>`].
     ///
     /// [`Location`]s in the `Token` are relative to [`self.index`] on entry.
     pub fn parse(&mut self) -> Option<Token<Statement>> {
+        // TODO.
         self.try_parse(|cs: &mut Characters| cs.next())
     }
 }

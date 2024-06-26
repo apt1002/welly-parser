@@ -2,7 +2,7 @@ use std::{io};
 use io::{BufRead, Write};
 
 mod util;
-pub use util::{UndoIterator};
+use util::{UndoIterator};
 
 mod parser;
 pub use parser::{Location, Token, Parse};
