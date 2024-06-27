@@ -1,4 +1,4 @@
-use super::{Location, Token, UndoIterator, Parse};
+use super::{TokenIterator, Failure, Context, Parse};
 
 pub enum AST {
     Char(char),
@@ -21,12 +21,7 @@ pub const INVALID: &'static str = "Invalid unicode scalar value";
 pub struct Parser;
 
 impl Parser {
-    fn backslash_x<I: Iterator<Item=Token<char>>>(
-        &self,
-        _start: Location,
-        _loc_x: Location,
-        _input: &mut UndoIterator<I>,
-    ) -> Option<Token<AST>> {
+    fn backslash_x(&self, _input: &mut Context<impl TokenIterator<T=char>>) -> Result<AST, Failure> {
         todo!()
     }
 }
@@ -35,28 +30,14 @@ impl Parse for Parser {
     type Input = char;
     type Output = AST;
 
-    fn parse<
-        I: Iterator<Item=Token<Self::Input>>,
-    >(&self, input: &mut UndoIterator<I>) -> Option<Token<Self::Output>> {
-        let start = match input.next() {
-            Some(Token(loc, Ok('\\'))) => loc,
-            other => { return other.map(Token::into); },
-        };
+    fn parse(&self, input: &mut Context<impl TokenIterator<T=char>>) -> Result<AST, Failure> {
+        let start = input.read()?;
+        if start != '\\' { return Ok(start.into()); }
         // We've read a backslash.
-        input.next().and_then(|token| match token {
-            Token(loc, Ok('0')) => {
-                Some(Token::compound([start, loc], '\0'))
-            },
-            Token(loc, Ok('x')) => {
-                self.backslash_x(start, loc, input)
-            },
-            Token(_, Ok(_)) => {
-                input.undo(token);
-                Some(Token::error([start], MISSING_SEQUENCE))
-            },
-            Token(loc, Err(e)) => {
-                Some(Token(loc, Err(e)))
-            },
-        })
+        match input.read()? {
+            '0' => Ok(AST::Sequence('\0')),
+            'x' => self.backslash_x(input),
+            token => { input.unread(token); Err(Failure::Error(MISSING_SEQUENCE.into())) },
+        }
     }
 }

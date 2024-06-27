@@ -7,7 +7,7 @@ pub use parser::{Location, Token, TokenIterator, Failure, Context, Parse, Parser
 mod buffer;
 pub use buffer::{Buffer};
 
-//pub mod escape;
+pub mod escape;
 
 pub fn echo<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<()> {
     let mut line = String::new();
