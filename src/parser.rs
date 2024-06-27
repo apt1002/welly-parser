@@ -47,6 +47,14 @@ impl<T> Token<T> {
 
 // ----------------------------------------------------------------------------
 
+/// An [`Iterator`] that yields [`Token<Self::T>`].
+pub trait TokenIterator: Iterator<Item=Token<Self::T>> {
+    /// The type of [`Token`] returned by this [`TokenIterator`].
+    type T;
+}
+
+// ----------------------------------------------------------------------------
+
 /// The [`Err`] type of [`Parse::parse()`] and [`Context::read()`].
 pub enum Failure {
     /// More input is needed to determine the parse result.
@@ -60,22 +68,24 @@ pub enum Failure {
 
 /// A wrapper around an [`Iterator`] of input [`Token`]s.
 ///
-/// It handles errors, and tracks the [`Location`]s of the input [`Token`]s
-/// that could form part of the next output [`Token]`.
-pub struct Context<T, I: Iterator<Item=Token<T>>> {
+/// It handles errors, and tracks the [`Location`]s of the input `Token`s
+/// that could form part of the next output `Token`.
+pub struct Context<I: TokenIterator> {
     /// The stream of input [`Token`]s that have not yet been read.
     input: I,
 
-    /// Non-error [`Token`]s to be returned before reading from [`input`], in
-    /// reverse order.
-    stack: Vec<(Location, T)>,
+    /// Non-error [`Token`]s to be returned before reading from [`input`],
+    /// in reverse order.
+    ///
+    /// [`input`]: Self::input
+    stack: Vec<(Location, I::T)>,
 
     /// The [`Location`]s of [`Token`]s that have been read but not yet used to
     /// form an output.
     locs: Vec<Location>,
 }
 
-impl<T, I: Iterator<Item=Token<T>>> Context<T, I> {
+impl<I: TokenIterator> Context<I> {
     pub fn new(input: I) -> Self {
         Self {input, stack: Vec::new(), locs: Vec::new()}
     }
@@ -99,7 +109,7 @@ impl<T, I: Iterator<Item=Token<T>>> Context<T, I> {
     }
 
     /// Read the next [`Token`] and internally record its [`Location`].
-    pub fn read(&mut self) -> Result<T, Failure> {
+    pub fn read(&mut self) -> Result<I::T, Failure> {
         if let Some(Token(loc, t)) = self.read_inner() {
             self.locs.push(loc);
             t.map_err(Failure::Error)
@@ -110,7 +120,7 @@ impl<T, I: Iterator<Item=Token<T>>> Context<T, I> {
 
     /// Read [`Token`]s until one matches `is_wanted`. Internally record its
     /// [`Location`].
-    pub fn read_until(&mut self, mut is_wanted: impl FnMut(&T) -> bool) -> Result<T, Failure> {
+    pub fn read_until(&mut self, mut is_wanted: impl FnMut(&I::T) -> bool) -> Result<I::T, Failure> {
         let mut t = self.read()?;
         while !is_wanted(&t) {
             let _ = self.pop();
@@ -123,7 +133,7 @@ impl<T, I: Iterator<Item=Token<T>>> Context<T, I> {
     ///
     /// `token` must be the most recent `Token`. It will be returned by the
     /// next call to `read()`.
-    pub fn unread(&mut self, token: T) {
+    pub fn unread(&mut self, token: I::T) {
         let loc = self.pop();
         self.stack.push((loc, token));
     }
@@ -139,33 +149,28 @@ pub trait Parse: Sized {
     /// The type of the output tokens.
     type Output;
 
-    /// Read input tokens from `input` and try to make a `Self::Output`.
-    fn parse<
-        I: Iterator<Item=Token<Self::Input>>,
-    >(
-        &self,
-        input: &mut Context<Self::Input, I>,
-    ) -> Result<Self::Output, Failure>;
+    /// Read input tokens from `input` and try to make a [`Self::Output`].
+    fn parse(&self, input: &mut Context<impl TokenIterator<T=Self::Input>>) -> Result<Self::Output, Failure>;
 }
 
 // ----------------------------------------------------------------------------
 
 /// An [`Iterator`] that generates items by calling [`Parse::parse()`].
-pub struct Parser<P: Parse, I: Iterator<Item=Token<P::Input>>> {
+pub struct Parser<P: Parse, I: TokenIterator<T=P::Input>> {
     /// The parsing function.
     parse: P,
 
     /// The input stream.
-    input: Context<P::Input, I>,
+    input: Context<I>,
 }
 
-impl<P: Parse, I: Iterator<Item=Token<P::Input>>> Parser<P, I> {
+impl<P: Parse, I: TokenIterator<T=P::Input>> Parser<P, I> {
     pub fn new(parse: P, input: I) -> Self {
         Self {parse, input: Context::new(input)}
     }
 }
 
-impl<P: Parse, I: Iterator<Item=Token<P::Input>>> Iterator for Parser<P, I> {
+impl<P: Parse, I: TokenIterator<T=P::Input>> Iterator for Parser<P, I> {
     type Item = Token<P::Output>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -184,4 +189,8 @@ impl<P: Parse, I: Iterator<Item=Token<P::Input>>> Iterator for Parser<P, I> {
             },
         }
     }
+}
+
+impl<P: Parse, I: TokenIterator<T=P::Input>> TokenIterator for Parser<P, I> {
+    type T = P::Output;
 }
