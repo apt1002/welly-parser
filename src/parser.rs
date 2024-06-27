@@ -1,5 +1,4 @@
 use std::ops::{Range};
-use super::{UndoIterator};
 
 /// A position in source code in a form that can be reported to the user.
 /// More precisely, a `Location` represents a contiguous range of bytes of
@@ -43,22 +42,91 @@ impl From<Range<usize>> for Location {
 pub struct Token<T>(pub Location, pub Result<T, String>);
 
 impl<T> Token<T> {
-    /// Constructs `Self` typically out of smaller `Token`s.
-    pub fn compound(locs: impl IntoIterator<Item=Location>, t: impl Into<T>) -> Self {
-        Token(Location::union(locs), Ok(t.into()))
+    pub fn into<U>(self) -> Token<U> where T: Into<U> { Token(self.0, self.1.map(T::into)) }
+}
+
+// ----------------------------------------------------------------------------
+
+/// The [`Err`] type of [`Parse::parse()`] and [`Context::read()`].
+pub enum Failure {
+    /// More input is needed to determine the parse result.
+    Incomplete,
+
+    /// The input could not be parsed.
+    Error(String),
+}
+
+// ----------------------------------------------------------------------------
+
+/// A wrapper around an [`Iterator`] of input [`Token`]s.
+///
+/// It handles errors, and tracks the [`Location`]s of the input [`Token`]s
+/// that could form part of the next output [`Token]`.
+pub struct Context<T, I: Iterator<Item=Token<T>>> {
+    /// The stream of input [`Token`]s that have not yet been read.
+    input: I,
+
+    /// Non-error [`Token`]s to be returned before reading from [`input`], in
+    /// reverse order.
+    stack: Vec<(Location, T)>,
+
+    /// The [`Location`]s of [`Token`]s that have been read but not yet used to
+    /// form an output.
+    locs: Vec<Location>,
+}
+
+impl<T, I: Iterator<Item=Token<T>>> Context<T, I> {
+    pub fn new(input: I) -> Self {
+        Self {input, stack: Vec::new(), locs: Vec::new()}
     }
 
-    /// Constructs `Self` from a [`Location`] and an error message.
-    pub fn error(locs: impl IntoIterator<Item=Location>, e: &str) -> Self {
-        Token(Location::union(locs), Err(e.into()))
+    /// Returns the [`Location`] of the most recent [`Token`], and forgets it.
+    pub fn pop(&mut self) -> Location {
+        self.locs.pop().expect("No tokens have been read")
     }
 
-    /// Preserves the [`Location`] and any error, but applies `f` to a token.
-    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Token<U> {
-        Token(self.0, self.1.map(f))
+    /// Returns the union of the [`Location`]s of all recent [`Token`]s and
+    /// forgets them.
+    pub fn drain(&mut self) -> Location { Location::union(self.locs.drain(..)) }
+
+    /// Returns `self.stack.pop()` if possible, otherwise `self.input.next()`.
+    fn read_inner(&mut self) -> Option<I::Item> {
+        if let Some((loc, t)) = self.stack.pop() {
+            Some(Token(loc, Ok(t)))
+        } else {
+            self.input.next()
+        }
     }
 
-    pub fn into<U>(self) -> Token<U> where T: Into<U> { self.map(T::into) }
+    /// Read the next [`Token`] and internally record its [`Location`].
+    pub fn read(&mut self) -> Result<T, Failure> {
+        if let Some(Token(loc, t)) = self.read_inner() {
+            self.locs.push(loc);
+            t.map_err(Failure::Error)
+        } else {
+            Err(Failure::Incomplete)
+        }
+    }
+
+    /// Read [`Token`]s until one matches `is_wanted`. Internally record its
+    /// [`Location`].
+    pub fn read_until(&mut self, mut is_wanted: impl FnMut(&T) -> bool) -> Result<T, Failure> {
+        let mut t = self.read()?;
+        while !is_wanted(&t) {
+            let _ = self.pop();
+            t = self.read()?;
+        }
+        Ok(t)
+    }
+
+    /// Pretend we haven't read the most recent [`Token`].
+    ///
+    /// `token` must be the most recent `Token`. It will be returned by the
+    /// next call to `read()`.
+    pub fn unread(&mut self, token: T) {
+        let loc = self.pop();
+        self.stack.push((loc, token));
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -72,26 +140,12 @@ pub trait Parse: Sized {
     type Output;
 
     /// Read input tokens from `input` and try to make a `Self::Output`.
-    ///
-    /// There are three possible return values:
-    /// - `None` indicates that not enough input is available.
-    /// - `Some(_, Ok(t))` indicates a successful parse with result `t`.
-    /// - `Some(_, Err(e))` indicates an unsuccessful parse with error `e`.
-    ///   This is also used at the end of the input, if there is no possibility
-    ///   of more input becoming available.
-    ///
-    /// In all cases, items will be irreversibly read from `input`. You may
-    /// therefore wish to clone `input` before calling this method.
     fn parse<
         I: Iterator<Item=Token<Self::Input>>,
-    >(&self, input: &mut UndoIterator<I>) -> Option<Token<Self::Output>>;
-
-    /// Parse a stream of [`Self::Input`] into a stream of [`Self::Output`].
-    fn iter<
-        I: Iterator<Item=Token<Self::Input>>,
-    >(self, input: I) -> Parser<Self, I> {
-        Parser {parse: self, input: UndoIterator::new(input)}
-    }
+    >(
+        &self,
+        input: &mut Context<Self::Input, I>,
+    ) -> Result<Self::Output, Failure>;
 }
 
 // ----------------------------------------------------------------------------
@@ -102,10 +156,32 @@ pub struct Parser<P: Parse, I: Iterator<Item=Token<P::Input>>> {
     parse: P,
 
     /// The input stream.
-    input: UndoIterator<I>,
+    input: Context<P::Input, I>,
+}
+
+impl<P: Parse, I: Iterator<Item=Token<P::Input>>> Parser<P, I> {
+    pub fn new(parse: P, input: I) -> Self {
+        Self {parse, input: Context::new(input)}
+    }
 }
 
 impl<P: Parse, I: Iterator<Item=Token<P::Input>>> Iterator for Parser<P, I> {
     type Item = Token<P::Output>;
-    fn next(&mut self) -> Option<Self::Item> { self.parse.parse(&mut self.input) }
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.parse.parse(&mut self.input) {
+            Ok(token) => {
+                Some(Token(self.input.drain(), Ok(token)))
+            },
+            Err(Failure::Incomplete) => {
+                let _ = self.input.drain();
+                None
+            },
+            Err(Failure::Error(e)) => {
+                let loc = self.input.pop();
+                let _ = self.input.drain();
+                Some(Token(loc, Err(e.into())))
+            },
+        }
+    }
 }

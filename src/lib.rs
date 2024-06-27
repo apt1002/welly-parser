@@ -1,16 +1,13 @@
 use std::{io};
 use io::{BufRead, Write};
 
-mod util;
-use util::{UndoIterator};
-
 mod parser;
-pub use parser::{Location, Token, Parse};
+pub use parser::{Location, Token, Parse, Parser};
 
 mod buffer;
 pub use buffer::{Buffer};
 
-pub mod escape;
+//pub mod escape;
 
 pub fn echo<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<()> {
     let mut line = String::new();
