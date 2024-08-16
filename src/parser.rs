@@ -12,13 +12,13 @@ pub struct Location {
 }
 
 impl Location {
-    /// Returns the smallest `Location` containing all
+    /// Returns the smallest `Location` containing all `pieces`.
     pub fn union(pieces: impl IntoIterator<Item=Self>) -> Self {
         let mut pieces = pieces.into_iter();
         let mut ret = pieces.next().expect("Cannot form the union of no pieces");
         while let Some(piece) = pieces.next() {
             ret.start = std::cmp::min(ret.start, piece.start);
-            ret.end = std::cmp::min(ret.end, piece.end);
+            ret.end = std::cmp::max(ret.end, piece.end);
         }
         ret
     }
@@ -150,7 +150,10 @@ pub trait Parse: Sized {
     type Output;
 
     /// Read input tokens from `input` and try to make a [`Self::Output`].
-    fn parse(&self, input: &mut Context<impl TokenIterator<T=Self::Input>>) -> Result<Self::Output, Failure>;
+    fn parse(
+        &self,
+        input: &mut Context<impl TokenIterator<T=Self::Input>>,
+    ) -> Result<Self::Output, Failure>;
 }
 
 // ----------------------------------------------------------------------------

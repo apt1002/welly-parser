@@ -12,6 +12,9 @@ pub struct Buffer {
 }
 
 impl Buffer {
+    /// Returns the suffix of [`self.source`] that has not yet been parsed.
+    pub fn remainder(&self) -> &str { &self.source[self.index..] }
+
     /// Attempt to parse [`self.remainder()`] using `parse`, leaving `index`
     /// unchanged if `parse` returns [`None`]
     fn try_parse<T>(
@@ -23,9 +26,6 @@ impl Buffer {
         if let Some(Token(location, _)) = ret { self.index += location.end; }
         ret
     }
-
-    /// Returns the suffix of [`self.source`] that has not yet been parsed.
-    pub fn remainder(&self) -> &str { &self.source[self.index..] }
 
     /// Parse and throw away a whitespace string.
     pub fn skip_whitespace(&mut self) {
