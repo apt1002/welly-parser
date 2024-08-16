@@ -1,8 +1,19 @@
 use super::{TokenIterator, Failure, fail, Context, Parse};
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum AST {
     Char(char),
     Sequence(char),
+}
+
+impl AST {
+    /// Convert `self` to a [`char`] unless it is `AST::Char(except)`.
+    pub fn to_char(self) -> char {
+        match self {
+            AST::Char(c) => c,
+            AST::Sequence(c) => c,
+        }
+    }
 }
 
 impl From<char> for AST {
