@@ -64,6 +64,11 @@ pub enum Failure {
     Error(String),
 }
 
+/// Returns `Err(Failure::Error(msg.into()))`.
+pub fn fail<T>(msg: &'static str) -> Result<T, Failure> {
+    Err(Failure::Error(msg.into()))
+}
+
 // ----------------------------------------------------------------------------
 
 /// A wrapper around an [`Iterator`] of input [`Token`]s.

@@ -1,4 +1,4 @@
-use super::{TokenIterator, Failure, Context, Parse};
+use super::{TokenIterator, Failure, fail, Context, Parse};
 
 pub enum AST {
     Char(char),
@@ -65,7 +65,7 @@ impl Parse for Parser {
             '\\' => Ok(AST::Sequence('\\')),
             'x' => self.parse_hex(input, 2),
             'u' => self.parse_hex(input, 4),
-            token => { input.unread(token); Err(Failure::Error(MISSING_SEQUENCE.into())) },
+            token => { input.unread(token); fail(MISSING_SEQUENCE) },
         }
     }
 }
