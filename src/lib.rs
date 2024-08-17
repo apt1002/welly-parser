@@ -10,6 +10,7 @@ pub use buffer::{Buffer};
 pub mod escape;
 pub mod lexer;
 pub mod word;
+pub mod bracket;
 
 pub fn echo<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<()> {
     let mut line = String::new();

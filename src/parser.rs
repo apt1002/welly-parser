@@ -39,6 +39,7 @@ impl From<Range<usize>> for Location {
 // ----------------------------------------------------------------------------
 
 /// Represents a parse tree of type `T` or a parse error, with a [`Location`].
+#[derive(Debug, PartialEq)]
 pub struct Token<T>(pub Location, pub Result<T, String>);
 
 impl<T> Token<T> {
