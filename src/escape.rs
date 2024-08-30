@@ -77,3 +77,53 @@ impl Parse for Parser {
         return fail(MISSING_SEQUENCE);
     }
 }
+
+// ----------------------------------------------------------------------------
+
+
+#[cfg(test)]
+mod tests {
+    use crate::parser;
+    use crate::buffer::{Characters};
+    use super::*;
+
+    #[test]
+    fn some_characters() {
+        let results: String = parser::Parser::new(
+            Parser, Characters::new("abcdef")
+        ).map(
+            |t| *t.1.unwrap().downcast::<char>().unwrap()
+        ).collect();
+        assert_eq!(results, "abcdef");
+    }
+
+    #[test]
+    fn some_escapes() {
+        let mut results = parser::Parser::new(
+            Parser, Characters::new("abcd\\nef")
+        );
+        assert_eq!(results.next().unwrap().downcast::<char>(), 'a');
+        assert_eq!(results.next().unwrap().downcast::<char>(), 'b');
+        assert_eq!(results.next().unwrap().downcast::<char>(), 'c');
+        assert_eq!(results.next().unwrap().downcast::<char>(), 'd');
+        assert_eq!(results.next().unwrap().downcast::<Sequence>(), Sequence('\n'));
+        assert_eq!(results.next().unwrap().downcast::<char>(), 'e');
+        assert_eq!(results.next().unwrap().downcast::<char>(), 'f');
+        assert!(results.next().is_none());
+    }
+
+    #[test]
+    fn bad_escape() {
+        let mut results = parser::Parser::new(
+            Parser, Characters::new("abcd\\ef")
+        );
+        assert_eq!(results.next().unwrap().downcast::<char>(), 'a');
+        assert_eq!(results.next().unwrap().downcast::<char>(), 'b');
+        assert_eq!(results.next().unwrap().downcast::<char>(), 'c');
+        assert_eq!(results.next().unwrap().downcast::<char>(), 'd');
+        assert_eq!(results.next().unwrap().unwrap_err(), MISSING_SEQUENCE);
+        assert_eq!(results.next().unwrap().downcast::<char>(), 'e');
+        assert_eq!(results.next().unwrap().downcast::<char>(), 'f');
+        assert!(results.next().is_none());
+    }
+}
