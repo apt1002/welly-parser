@@ -1,26 +1,14 @@
-use super::{lexer, TokenIterator, Failure, Context, Parse};
+use std::any::{Any};
+use super::{TokenIterator, Failure, Context, Parse};
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum AST {
-    Char(char),
-    Comment(String),
-    CharacterLiteral(char),
-    StringLiteral(String),
-    Whitespace(String),
-    Symbol(String),
-    Alphanumeric(String),
-}
+pub struct Whitespace(String);
 
-impl From<lexer::AST> for AST {
-    fn from(value: lexer::AST) -> AST {
-        match value {
-            lexer::AST::Char(c) => AST::Char(c),
-            lexer::AST::Comment(s) => AST::Comment(s),
-            lexer::AST::CharacterLiteral(c) => AST::CharacterLiteral(c),
-            lexer::AST::StringLiteral(s) => AST::StringLiteral(s),
-        }
-    }
-}
+#[derive(Debug, Clone, PartialEq)]
+pub struct Symbol(String);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Alphanumeric(String);
 
 // ----------------------------------------------------------------------------
 
@@ -49,17 +37,16 @@ impl CharacterClass {
         }
     }
 
-    /// Combine `self` with `s` to make an [`AST`].
-    fn wrap(self, s: String) -> AST {
+    /// Combine `self` with `s` to make a [`dyn Any`].
+    fn wrap(self, s: String) -> Box<dyn Any> {
         use CharacterClass::*;
         match self {
-            WHITESPACE => AST::Whitespace(s),
-            SYMBOL => AST::Symbol(s),
-            ALPHANUMERIC => AST::Alphanumeric(s),
+            WHITESPACE => Box::new(Whitespace(s)),
+            SYMBOL => Box::new(Symbol(s)),
+            ALPHANUMERIC => Box::new(Alphanumeric(s)),
         }
     }
 }
-
 
 // ----------------------------------------------------------------------------
 
@@ -67,32 +54,27 @@ impl CharacterClass {
 pub struct Parser;
 
 impl Parse for Parser {
-    type Input = lexer::AST;
-
-    type Output = AST;
-
     fn parse(
         &self,
-        input: &mut Context<impl TokenIterator<T=Self::Input>>,
-    ) -> Result<Self::Output, Failure> {
-        match input.read()? {
-            lexer::AST::Char(c) => if let Some(cc) = CharacterClass::classify(c) {
+        input: &mut Context<impl TokenIterator>,
+    ) -> Result<Box<dyn Any>, Failure> {
+        if let Some(c) = input.read::<char>()? {
+            if let Some(cc) = CharacterClass::classify(*c) {
                 let mut s = String::new();
-                s.push(c);
-                loop {
-                    match input.read()? {
-                        lexer::AST::Char(c) => {
-                            if CharacterClass::classify(c) != Some(cc) { break; }
-                            s.push(c);
-                        },
-                        a => { input.unread(a); break; }
+                s.push(*c);
+                while let Some(c) = input.read::<char>()? {
+                    if CharacterClass::classify(*c) != Some(cc) {
+                        input.unread(c);
+                        break;
                     }
+                    s.push(*c);
                 }
                 Ok(cc.wrap(s))
             } else {
-                Ok(AST::Char(c))
-            },
-            a => Ok(AST::from(a)),
+                Ok(c)
+            }
+        } else {
+            input.read_any()
         }
     }
 }

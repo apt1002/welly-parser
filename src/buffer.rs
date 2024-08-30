@@ -17,10 +17,10 @@ impl Buffer {
 
     /// Attempt to parse [`self.remainder()`] using `parse`, leaving `index`
     /// unchanged if `parse` returns [`None`]
-    fn try_parse<T>(
+    fn try_parse(
         &mut self,
-        parse: impl FnOnce(&mut Characters) -> Option<Token<T>>,
-    ) -> Option<Token<T>> {
+        parse: impl FnOnce(&mut Characters) -> Option<Token>,
+    ) -> Option<Token> {
         let mut stream = Characters::new(self.remainder());
         let ret = parse(&mut stream);
         if let Some(Token(location, _)) = ret { self.index += location.end; }
@@ -30,13 +30,13 @@ impl Buffer {
     /// Parse and throw away a whitespace string.
     pub fn skip_whitespace(&mut self) {
         // TODO.
-        self.try_parse(|_cs: &mut Characters| Some(Token(Location::from(0), Ok(()))));
+        self.try_parse(|_cs: &mut Characters| Some(Token(Location::from(0), Ok(Box::new(())))));
     }
 
-    /// Parse and return a [`Token<Statement>`].
+    /// Parse and return a [`Statement`].
     ///
     /// [`Location`]s in the `Token` are relative to [`self.index`] on entry.
-    pub fn parse(&mut self) -> Option<Token<Statement>> {
+    pub fn parse(&mut self) -> Option<Token> {
         // TODO.
         self.try_parse(|cs: &mut Characters| cs.next())
     }
@@ -66,17 +66,12 @@ impl<'a> Characters<'a> {
 }
 
 impl<'a> Iterator for Characters<'a> {
-    type Item = Token<char>;
+    type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
         let start = self.index();
         let c = self.chars.next();
         let end = self.index();
-        c.map(|c| Token(Location::from(start..end), Ok(c)))
+        c.map(|c| Token(Location::from(start..end), Ok(Box::new(c))))
     }
 }
-
-// ----------------------------------------------------------------------------
-
-/// Stub.
-pub type Statement = char;

@@ -1,3 +1,4 @@
+use std::any::{Any};
 use std::ops::{Range};
 
 /// A position in source code in a form that can be reported to the user.
@@ -39,20 +40,29 @@ impl From<Range<usize>> for Location {
 // ----------------------------------------------------------------------------
 
 /// Represents a parse tree of type `T` or a parse error, with a [`Location`].
-#[derive(Debug, PartialEq)]
-pub struct Token<T>(pub Location, pub Result<T, String>);
+pub struct Token(pub Location, pub Result<Box<dyn Any>, String>);
 
-impl<T> Token<T> {
-    pub fn into<U>(self) -> Token<U> where T: Into<U> { Token(self.0, self.1.map(T::into)) }
+impl Token {
+    /// Discard the [`Location`], panic on `Err`, and panic if the payload is
+    /// not of type `T`.
+    ///
+    /// This is useful in test code.
+    pub fn downcast<T: 'static>(self) -> T {
+        *self.1.unwrap().downcast::<T>().unwrap()
+    }
+
+    /// Discard the [`Location`], panic on `Ok`, return the error message.
+    pub fn unwrap_err(self) -> String {
+        self.1.unwrap_err()
+    }
 }
 
 // ----------------------------------------------------------------------------
 
-/// An [`Iterator`] that yields [`Token<Self::T>`].
-pub trait TokenIterator: Iterator<Item=Token<Self::T>> {
-    /// The type of [`Token`] returned by this [`TokenIterator`].
-    type T;
-}
+/// An [`Iterator`] that yields [`Token`].
+pub trait TokenIterator: Iterator<Item=Token> {}
+
+impl<I: Iterator<Item=Token>> TokenIterator for I {}
 
 // ----------------------------------------------------------------------------
 
@@ -66,7 +76,7 @@ pub enum Failure {
 }
 
 /// Returns `Err(Failure::Error(msg.into()))`.
-pub fn fail<T>(msg: &'static str) -> Result<T, Failure> {
+pub fn fail(msg: &'static str) -> Result<Box<dyn Any>, Failure> {
     Err(Failure::Error(msg.into()))
 }
 
@@ -84,7 +94,7 @@ pub struct Context<I: TokenIterator> {
     /// in reverse order.
     ///
     /// [`input`]: Self::input
-    stack: Vec<(Location, I::T)>,
+    stack: Vec<(Location, Box<dyn Any>)>,
 
     /// The [`Location`]s of [`Token`]s that have been read but not yet used to
     /// form an output.
@@ -101,12 +111,12 @@ impl<I: TokenIterator> Context<I> {
         self.locs.pop().expect("No tokens have been read")
     }
 
-    /// Returns the union of the [`Location`]s of all recent [`Token`]s and
+    /// Returns an iterator over the [`Location`]s of all recent [`Token`]s and
     /// forgets them.
-    pub fn drain(&mut self) -> Location { Location::union(self.locs.drain(..)) }
+    pub fn drain(&mut self) -> impl Iterator<Item=Location> + '_ { self.locs.drain(..) }
 
     /// Returns `self.stack.pop()` if possible, otherwise `self.input.next()`.
-    fn read_inner(&mut self) -> Option<I::Item> {
+    fn read_inner(&mut self) -> Option<Token> {
         if let Some((loc, t)) = self.stack.pop() {
             Some(Token(loc, Ok(t)))
         } else {
@@ -115,7 +125,9 @@ impl<I: TokenIterator> Context<I> {
     }
 
     /// Read the next [`Token`] and internally record its [`Location`].
-    pub fn read(&mut self) -> Result<I::T, Failure> {
+    /// - Ok(token) - The mext `Token`, unwrapped.
+    /// - Err(failure) - A [`Failure`] prevented parsing of the next `Token`.
+    pub fn read_any(&mut self) -> Result<Box<dyn Any>, Failure> {
         if let Some(Token(loc, t)) = self.read_inner() {
             self.locs.push(loc);
             t.map_err(Failure::Error)
@@ -124,24 +136,31 @@ impl<I: TokenIterator> Context<I> {
         }
     }
 
-    /// Read [`Token`]s until one matches `is_wanted`. Internally record its
-    /// [`Location`].
-    pub fn read_until(&mut self, mut is_wanted: impl FnMut(&I::T) -> bool) -> Result<I::T, Failure> {
-        let mut t = self.read()?;
-        while !is_wanted(&t) {
-            let _ = self.pop();
-            t = self.read()?;
-        }
-        Ok(t)
+    /// Read the next [`Token`] and internally record its [`Location`], but
+    /// only if its payload is of type `T`.
+    /// - Ok(Some(token)) - The next `Token` is of type `T`.
+    /// - Ok(None) - The next `Token` is not a `T`, and has not been read.
+    /// - Err(failure) - A [`Failure`] prevented parsing of the next `Token`.
+    pub fn read<T: 'static + Any>(&mut self) -> Result<Option<Box<T>>, Failure> {
+        let t = self.read_any()?;
+        Ok(match t.downcast::<T>() {
+            Ok(t) => Some(t),
+            Err(t) => { self.unread_any(t); None },
+        })
     }
 
     /// Pretend we haven't read the most recent [`Token`].
     ///
     /// `token` must be the most recent `Token`. It will be returned by the
     /// next call to `read()`.
-    pub fn unread(&mut self, token: I::T) {
+    pub fn unread_any(&mut self, token: Box<dyn Any>) {
         let loc = self.pop();
         self.stack.push((loc, token));
+    }
+
+    /// Pretend we haven't read the most recent [`Token`].
+    pub fn unread<T: 'static + Any>(&mut self, token: Box<T>) {
+        self.unread_any(token);
     }
 }
 
@@ -149,23 +168,17 @@ impl<I: TokenIterator> Context<I> {
 
 /// Parse a `Self` from a stream of [`Self::Input`]s.
 pub trait Parse: Sized {
-    /// The type of the input tokens.
-    type Input;
-
-    /// The type of the output tokens.
-    type Output;
-
     /// Read input tokens from `input` and try to make a [`Self::Output`].
     fn parse(
         &self,
-        input: &mut Context<impl TokenIterator<T=Self::Input>>,
-    ) -> Result<Self::Output, Failure>;
+        input: &mut Context<impl TokenIterator>,
+    ) -> Result<Box<dyn Any>, Failure>;
 }
 
 // ----------------------------------------------------------------------------
 
 /// An [`Iterator`] that generates items by calling [`Parse::parse()`].
-pub struct Parser<P: Parse, I: TokenIterator<T=P::Input>> {
+pub struct Parser<P: Parse, I: TokenIterator> {
     /// The parsing function.
     parse: P,
 
@@ -173,19 +186,20 @@ pub struct Parser<P: Parse, I: TokenIterator<T=P::Input>> {
     input: Context<I>,
 }
 
-impl<P: Parse, I: TokenIterator<T=P::Input>> Parser<P, I> {
+impl<P: Parse, I: TokenIterator> Parser<P, I> {
     pub fn new(parse: P, input: I) -> Self {
         Self {parse, input: Context::new(input)}
     }
 }
 
-impl<P: Parse, I: TokenIterator<T=P::Input>> Iterator for Parser<P, I> {
-    type Item = Token<P::Output>;
+impl<P: Parse, I: TokenIterator> Iterator for Parser<P, I> {
+    type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.parse.parse(&mut self.input) {
             Ok(token) => {
-                Some(Token(self.input.drain(), Ok(token)))
+                let loc = Location::union(self.input.drain());
+                Some(Token(loc, Ok(token)))
             },
             Err(Failure::Incomplete) => {
                 let _ = self.input.drain();
@@ -198,8 +212,4 @@ impl<P: Parse, I: TokenIterator<T=P::Input>> Iterator for Parser<P, I> {
             },
         }
     }
-}
-
-impl<P: Parse, I: TokenIterator<T=P::Input>> TokenIterator for Parser<P, I> {
-    type T = P::Output;
 }
