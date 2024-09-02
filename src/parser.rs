@@ -1,4 +1,5 @@
 use std::any::{Any};
+use std::{fmt};
 use std::ops::{Range};
 
 /// A position in source code in a form that can be reported to the user.
@@ -54,6 +55,14 @@ impl Token {
     /// Discard the [`Location`], panic on `Ok`, return the error message.
     pub fn unwrap_err(self) -> String {
         self.1.unwrap_err()
+    }
+}
+
+impl fmt::Debug for Token {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_tuple("Token")
+            .field(&(self.0.start .. self.0.end))
+            .finish()
     }
 }
 
