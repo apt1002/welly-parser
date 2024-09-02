@@ -80,7 +80,6 @@ impl Parse for Parser {
 
 // ----------------------------------------------------------------------------
 
-
 #[cfg(test)]
 mod tests {
     use crate::parser;
