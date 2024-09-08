@@ -1,5 +1,5 @@
 use std::any::{Any};
-use super::{TokenIterator, Failure, Context, Parse};
+use super::{Stream, Context, Parse};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Whitespace(String);
@@ -56,8 +56,8 @@ pub struct Parser;
 impl Parse for Parser {
     fn parse(
         &self,
-        input: &mut Context<impl TokenIterator>,
-    ) -> Result<Box<dyn Any>, Failure> {
+        input: &mut Context<impl Stream>,
+    ) -> Result<Box<dyn Any>, String> {
         if let Some(c) = input.read::<char>()? {
             if let Some(cc) = CharacterClass::classify(*c) {
                 let mut s = String::new();

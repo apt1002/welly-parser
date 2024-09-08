@@ -1,5 +1,5 @@
 use std::any::{Any};
-use super::{escape, TokenIterator, Failure, fail, Context, Parse};
+use super::{escape, Stream, Context, Parse};
 
 #[derive(Debug, Clone)]
 pub struct Comment;
@@ -25,8 +25,8 @@ impl Parser {
     /// Parse a line comment, starting after the initial `//`.
     fn parse_line_comment(
         &self, input:
-        &mut Context<impl TokenIterator>,
-    ) -> Result<Box<dyn Any>, Failure> {
+        &mut Context<impl Stream>,
+    ) -> Result<Box<dyn Any>, String> {
         loop {
             if let Some(c) = input.read::<char>()? {
                 if *c == '\n' { input.unread(c); break; }
@@ -42,8 +42,8 @@ impl Parser {
     /// Parse a line comment, starting after the initial `/*`.
     fn parse_block_comment(
         &self, input:
-        &mut Context<impl TokenIterator>,
-    ) -> Result<Box<dyn Any>, Failure> {
+        &mut Context<impl Stream>,
+    ) -> Result<Box<dyn Any>, String> {
         loop {
             if let Some(c) = input.read::<char>()? {
                 if *c == '*' {
@@ -55,7 +55,7 @@ impl Parser {
             } else if let Some(_) = input.read::<escape::Sequence>()? {
             } else {
                 // E.g. end of file.
-                return fail(UNTERMINATED_BLOCK_COMMENT);
+                return Err(UNTERMINATED_BLOCK_COMMENT.into());
             }
         }
         Ok(Box::new(Comment))
@@ -64,20 +64,20 @@ impl Parser {
     /// Parse a line comment, starting after the initial `'`.
     fn parse_character_literal(
         &self, input:
-        &mut Context<impl TokenIterator>,
-    ) -> Result<Box<dyn Any>, Failure> {
+        &mut Context<impl Stream>,
+    ) -> Result<Box<dyn Any>, String> {
         let c = if let Some(c) = input.read::<char>()? {
-            if *c == '\'' { return fail(MISSING_CHAR); }
+            if *c == '\'' { return Err(MISSING_CHAR.into()); }
             *c
         } else if let Some(seq) = input.read::<escape::Sequence>()? {
             seq.0
         } else {
-            return fail(MISSING_CHAR);
+            return Err(MISSING_CHAR.into());
         };
         if let Some(c2) = input.read::<char>()? {
-            if *c2 != '\'' { input.unread(c2); return fail(UNTERMINATED_CHAR); }
+            if *c2 != '\'' { input.unread(c2); return Err(UNTERMINATED_CHAR.into()); }
         } else {
-            return fail(UNTERMINATED_CHAR);
+            return Err(UNTERMINATED_CHAR.into());
         }
         Ok(Box::new(CharacterLiteral(c)))
     }
@@ -85,8 +85,8 @@ impl Parser {
     /// Parse a line comment, starting after the initial `"`.
     fn parse_string_literal(
         &self, input:
-        &mut Context<impl TokenIterator>,
-    ) -> Result<Box<dyn Any>, Failure> {
+        &mut Context<impl Stream>,
+    ) -> Result<Box<dyn Any>, String> {
         let mut s = String::new();
         loop {
             let c = if let Some(c) = input.read::<char>()? {
@@ -95,7 +95,7 @@ impl Parser {
             } else if let Some(seq) = input.read::<escape::Sequence>()? {
                 seq.0
             } else {
-                return fail(UNTERMINATED_STRING);
+                return Err(UNTERMINATED_STRING.into());
             };
             s.push(c);
         }
@@ -107,8 +107,8 @@ impl Parser {
 impl Parse for Parser {
     fn parse(
         &self,
-        input: &mut Context<impl TokenIterator>,
-    ) -> Result<Box<dyn Any>, Failure> {
+        input: &mut Context<impl Stream>,
+    ) -> Result<Box<dyn Any>, String> {
         if let Some(c) = input.read::<char>()? {
             match *c {
                 '/' => if let Some(c2) = input.read::<char>()? {

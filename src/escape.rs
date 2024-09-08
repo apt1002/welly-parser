@@ -1,5 +1,5 @@
 use std::any::{Any};
-use super::{TokenIterator, Failure, fail, Context, Parse};
+use super::{Stream, Context, Parse};
 
 /// An escape sequence.
 #[derive(Debug, PartialEq)]
@@ -28,9 +28,9 @@ pub struct Parser;
 impl Parser {
     fn parse_hex(
         &self,
-        input: &mut Context<impl TokenIterator>,
+        input: &mut Context<impl Stream>,
         num_digits: usize,
-    ) -> Result<Box<dyn Any>, Failure> {
+    ) -> Result<Box<dyn Any>, String> {
         let mut ret: u32 = 0;
         for i in 0..num_digits {
             if let Some(c) = input.read::<char>()? {
@@ -38,22 +38,22 @@ impl Parser {
                     ret |= d << (i * 4);
                 } else {
                     input.unread(c);
-                    return fail(MISSING_HEX);
+                    return Err(MISSING_HEX.into());
                 }
             } else {
-                return fail(MISSING_HEX);
+                return Err(MISSING_HEX.into());
             }
         }
         if let Some(c) = char::from_u32(ret) {
             Ok(Box::new(Sequence(c)))
         } else {
-            return fail(INVALID);
+            return Err(INVALID.into());
         }
     }
 }
 
 impl Parse for Parser {
-    fn parse(&self, input: &mut Context<impl TokenIterator>) -> Result<Box<dyn Any>, Failure> {
+    fn parse(&self, input: &mut Context<impl Stream>) -> Result<Box<dyn Any>, String> {
         if let Some(c) = input.read::<char>()? {
             if *c != '\\' { return Ok(c); }
         } else {
@@ -74,7 +74,7 @@ impl Parse for Parser {
                 _ => { input.unread(c); },
             }
         }
-        return fail(MISSING_SEQUENCE);
+        return Err(MISSING_SEQUENCE.into());
     }
 }
 
@@ -88,41 +88,27 @@ mod tests {
 
     #[test]
     fn some_characters() {
-        let results: String = parser::Parser::new(
-            Parser, Characters::new("abcdef")
-        ).map(
-            |t| *t.1.unwrap().downcast::<char>().unwrap()
-        ).collect();
-        assert_eq!(results, "abcdef");
+        let mut results = parser::Parser::new(Parser, Characters::new("ab"));
+        assert_eq!('a', results.read().unwrap());
+        assert_eq!('b', results.read().unwrap());
+        assert!(results.read().is_end_of_file());
     }
 
     #[test]
     fn some_escapes() {
-        let mut results = parser::Parser::new(
-            Parser, Characters::new("abcd\\nef")
-        );
-        assert_eq!(results.next().unwrap().downcast::<char>(), 'a');
-        assert_eq!(results.next().unwrap().downcast::<char>(), 'b');
-        assert_eq!(results.next().unwrap().downcast::<char>(), 'c');
-        assert_eq!(results.next().unwrap().downcast::<char>(), 'd');
-        assert_eq!(results.next().unwrap().downcast::<Sequence>(), Sequence('\n'));
-        assert_eq!(results.next().unwrap().downcast::<char>(), 'e');
-        assert_eq!(results.next().unwrap().downcast::<char>(), 'f');
-        assert!(results.next().is_none());
+        let mut results = parser::Parser::new(Parser, Characters::new("a\\nb"));
+        assert_eq!('a', results.read().unwrap());
+        assert_eq!(Sequence('\n'), results.read().unwrap());
+        assert_eq!('b', results.read().unwrap());
+        assert!(results.read().is_end_of_file());
     }
 
     #[test]
     fn bad_escape() {
-        let mut results = parser::Parser::new(
-            Parser, Characters::new("abcd\\ef")
-        );
-        assert_eq!(results.next().unwrap().downcast::<char>(), 'a');
-        assert_eq!(results.next().unwrap().downcast::<char>(), 'b');
-        assert_eq!(results.next().unwrap().downcast::<char>(), 'c');
-        assert_eq!(results.next().unwrap().downcast::<char>(), 'd');
-        assert_eq!(results.next().unwrap().unwrap_err(), MISSING_SEQUENCE);
-        assert_eq!(results.next().unwrap().downcast::<char>(), 'e');
-        assert_eq!(results.next().unwrap().downcast::<char>(), 'f');
-        assert!(results.next().is_none());
+        let mut results = parser::Parser::new(Parser, Characters::new("a\\b"));
+        assert_eq!('a', results.read().unwrap());
+        assert_eq!(MISSING_SEQUENCE, results.read().unwrap_err());
+        assert_eq!('b', results.read().unwrap());
+        assert!(results.read().is_end_of_file());
     }
 }

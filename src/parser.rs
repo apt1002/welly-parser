@@ -6,6 +6,7 @@ use std::ops::{Range};
 ///
 /// This will be the last input token a parser receives. Parsers must return it
 /// unchanged.
+#[derive(Debug, Copy, Clone)]
 pub struct EndOfFile;
 
 // ----------------------------------------------------------------------------
@@ -22,6 +23,9 @@ pub struct Location {
 }
 
 impl Location {
+    /// A dummy value that can be used for things like [`EndOfFile`].
+    pub const EVERYWHERE: Location = Location {start: usize::MIN, end: usize::MAX};
+
     /// Returns the smallest `Location` containing all `pieces`.
     pub fn union(pieces: impl IntoIterator<Item=Self>) -> Self {
         let mut pieces = pieces.into_iter();
@@ -49,14 +53,36 @@ impl From<Range<usize>> for Location {
 // ----------------------------------------------------------------------------
 
 /// Represents a parse tree of type `T` or a parse error, with a [`Location`].
+///
+/// - Token(loc, Ok(t)) represents a partial parse-tree `t`.
+///   `t` can be [`EndOfFile`] to represent the end of the source code.
+///   In this case, the `Location` is spurious.
+/// - Token(loc, Err(e)) represents an error message `e`.
+///   `e` can be the empty string to mark the end of incomplete source code.
+///   In this case, the `Location` is spurious.
 pub struct Token(pub Location, pub Result<Box<dyn Any>, String>);
 
 impl Token {
+    /// If `self` is `Token(_, Ok(t))` and `t` is of type `T`, return it.
+    pub fn downcast_copy<T: 'static + Copy>(&self) -> Option<T> {
+        if let Token(_, Ok(t)) = self { t.downcast_ref().copied() } else { None }
+    }
+
+    /// Tests whether `self` is [`EndOfFile`].
+    pub fn is_end_of_file(&self) -> bool {
+        self.downcast_copy::<EndOfFile>().is_some()
+    }
+
+    /// Tests whether `self` marks the end of incomplete source code.
+    pub fn is_incomplete(&self) -> bool {
+        if let Token(_, Err(e)) = self { e.len() == 0 } else { false }
+    }
+
     /// Discard the [`Location`], panic on `Err`, and panic if the payload is
     /// not of type `T`.
     ///
     /// This is useful in test code.
-    pub fn downcast<T: 'static>(self) -> T {
+    pub fn unwrap<T: 'static>(self) -> T {
         *self.1.unwrap().downcast::<T>().unwrap()
     }
 
@@ -68,43 +94,47 @@ impl Token {
 
 impl fmt::Debug for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_tuple("Token")
-            .field(&(self.0.start .. self.0.end))
-            .finish()
+        if self.is_end_of_file() { return f.write_str(&"EndOfFile"); }
+        if self.is_incomplete() { return f.write_str(&"Incomplete"); }
+        f.write_fmt(format_args!("Token({}..{})", self.0.start, self.0.end))
     }
 }
 
 // ----------------------------------------------------------------------------
 
-/// An [`Iterator`] that yields [`Token`].
-pub trait TokenIterator: Iterator<Item=Token> {}
+/// Yields [`Token`]s.
+pub trait Stream {
+    /// Read a single `Token`.
+    fn read(&mut self) -> Token;
 
-impl<I: Iterator<Item=Token>> TokenIterator for I {}
+    /// Read all `Token`s, upto and excluding [`EndOfFile`].
+    fn collect(mut self) -> Vec<Token> where Self: Sized {
+        let mut ret = Vec::new();
+        let mut token = self.read();
+        while !token.is_end_of_file() {
+            ret.push(token);
+            token = self.read();
+        }
+        ret
+    }
+}
+
+impl<I: Iterator<Item=Token>> Stream for I {
+    fn read(&mut self) -> Token {
+        self.next().unwrap_or_else(
+            || Token(Location::EVERYWHERE, Ok(Box::new(EndOfFile)))
+        )
+    }
+}
 
 // ----------------------------------------------------------------------------
 
-/// The [`Err`] type of [`Parse::parse()`] and [`Context::read()`].
-pub enum Failure {
-    /// More input is needed to determine the parse result.
-    Incomplete,
-
-    /// The input could not be parsed.
-    Error(String),
-}
-
-/// Returns `Err(Failure::Error(msg.into()))`.
-pub fn fail(msg: &'static str) -> Result<Box<dyn Any>, Failure> {
-    Err(Failure::Error(msg.into()))
-}
-
-// ----------------------------------------------------------------------------
-
-/// A wrapper around an [`Iterator`] of input [`Token`]s.
+/// A wrapper around an input [`Stream`].
 ///
 /// It handles errors, and tracks the [`Location`]s of the input `Token`s
 /// that could form part of the next output `Token`.
-pub struct Context<I: TokenIterator> {
-    /// The stream of input [`Token`]s that have not yet been read.
+pub struct Context<I: Stream> {
+    /// The input [`Stream`].
     input: I,
 
     /// Non-error [`Token`]s to be returned before reading from [`input`],
@@ -118,7 +148,7 @@ pub struct Context<I: TokenIterator> {
     locs: Vec<Location>,
 }
 
-impl<I: TokenIterator> Context<I> {
+impl<I: Stream> Context<I> {
     pub fn new(input: I) -> Self {
         Self {input, stack: Vec::new(), locs: Vec::new()}
     }
@@ -132,25 +162,22 @@ impl<I: TokenIterator> Context<I> {
     /// forgets them.
     pub fn drain(&mut self) -> impl Iterator<Item=Location> + '_ { self.locs.drain(..) }
 
-    /// Returns `self.stack.pop()` if possible, otherwise `self.input.next()`.
-    fn read_inner(&mut self) -> Option<Token> {
+    /// Returns `self.stack.pop()` if possible, otherwise `self.input.read()`.
+    fn read_inner(&mut self) -> Token {
         if let Some((loc, t)) = self.stack.pop() {
-            Some(Token(loc, Ok(t)))
+            Token(loc, Ok(t))
         } else {
-            self.input.next()
+            self.input.read()
         }
     }
 
     /// Read the next [`Token`] and internally record its [`Location`].
     /// - Ok(token) - The mext `Token`, unwrapped.
-    /// - Err(failure) - A [`Failure`] prevented parsing of the next `Token`.
-    pub fn read_any(&mut self) -> Result<Box<dyn Any>, Failure> {
-        if let Some(Token(loc, t)) = self.read_inner() {
-            self.locs.push(loc);
-            t.map_err(Failure::Error)
-        } else {
-            Err(Failure::Incomplete)
-        }
+    /// - Err(msg) - An error prevented parsing of the next `Token`.
+    pub fn read_any(&mut self) -> Result<Box<dyn Any>, String> {
+        let Token(loc, t) = self.read_inner();
+        self.locs.push(loc);
+        t
     }
 
     /// Read the next [`Token`] and internally record its [`Location`], but
@@ -158,7 +185,7 @@ impl<I: TokenIterator> Context<I> {
     /// - Ok(Some(token)) - The next `Token` is of type `T`.
     /// - Ok(None) - The next `Token` is not a `T`, and has not been read.
     /// - Err(failure) - A [`Failure`] prevented parsing of the next `Token`.
-    pub fn read<T: 'static + Any>(&mut self) -> Result<Option<Box<T>>, Failure> {
+    pub fn read<T: 'static + Any>(&mut self) -> Result<Option<Box<T>>, String> {
         let t = self.read_any()?;
         Ok(match t.downcast::<T>() {
             Ok(t) => Some(t),
@@ -188,14 +215,14 @@ pub trait Parse: Sized {
     /// Read input tokens from `input` and try to make a [`Self::Output`].
     fn parse(
         &self,
-        input: &mut Context<impl TokenIterator>,
-    ) -> Result<Box<dyn Any>, Failure>;
+        input: &mut Context<impl Stream>,
+    ) -> Result<Box<dyn Any>, String>;
 }
 
 // ----------------------------------------------------------------------------
 
 /// An [`Iterator`] that generates items by calling [`Parse::parse()`].
-pub struct Parser<P: Parse, I: TokenIterator> {
+pub struct Parser<P: Parse, I: Stream> {
     /// The parsing function.
     parse: P,
 
@@ -203,29 +230,23 @@ pub struct Parser<P: Parse, I: TokenIterator> {
     input: Context<I>,
 }
 
-impl<P: Parse, I: TokenIterator> Parser<P, I> {
+impl<P: Parse, I: Stream> Parser<P, I> {
     pub fn new(parse: P, input: I) -> Self {
         Self {parse, input: Context::new(input)}
     }
 }
 
-impl<P: Parse, I: TokenIterator> Iterator for Parser<P, I> {
-    type Item = Token;
-
-    fn next(&mut self) -> Option<Self::Item> {
+impl<P: Parse, I: Stream> Stream for Parser<P, I> {
+    fn read(&mut self) -> Token {
         match self.parse.parse(&mut self.input) {
             Ok(token) => {
                 let loc = Location::union(self.input.drain());
-                Some(Token(loc, Ok(token)))
+                Token(loc, Ok(token))
             },
-            Err(Failure::Incomplete) => {
-                let _ = self.input.drain();
-                None
-            },
-            Err(Failure::Error(e)) => {
+            Err(e) => {
                 let loc = self.input.pop();
                 let _ = self.input.drain();
-                Some(Token(loc, Err(e.into())))
+                Token(loc, Err(e.into()))
             },
         }
     }
