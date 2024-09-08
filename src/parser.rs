@@ -2,6 +2,14 @@ use std::any::{Any};
 use std::{fmt};
 use std::ops::{Range};
 
+/// Represents the end of the source code.
+///
+/// This will be the last input token a parser receives. Parsers must return it
+/// unchanged.
+pub struct EndOfFile;
+
+// ----------------------------------------------------------------------------
+
 /// A position in source code in a form that can be reported to the user.
 /// More precisely, a `Location` represents a contiguous range of bytes of
 /// source code.
