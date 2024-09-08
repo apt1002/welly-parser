@@ -114,4 +114,56 @@ mod tests {
         assert_eq!(contents1.read(), EndOfFile);
         assert_eq!(parser.read(), EndOfFile);
     }
+
+    #[test]
+    fn inside_out() {
+        /// Pretend this is a parser for a complicated grammar.
+        fn noop(parser: impl Stream) -> impl Stream { parser }
+
+        /// Wrap 'parser' in a [`Round`] parser.
+        fn round(parser: impl Stream) -> impl Stream {
+            noop(Parser::new('(', ')', |contents| {
+                let contents = noop(contents.into_iter()).read_all();
+                Box::new(Round(contents))
+            }, parser))
+        }
+
+        /// Wrap 'parser' in a [`Square`] parser.
+        fn square(parser: impl Stream) -> impl Stream {
+            round(Parser::new('[', ']', |contents| {
+                let contents = round(contents.into_iter()).read_all();
+                Box::new(Square(contents))
+            }, parser))
+        }
+
+        /// Wrap 'parser' in a [`Brace`] parser.
+        fn brace(parser: impl Stream) -> impl Stream {
+            square(Parser::new('{', '}', |contents| {
+                let contents = square(contents.into_iter()).read_all();
+                Box::new(Brace(contents))
+            }, parser))
+        }
+
+        let mut parser = brace(Characters::new("a{b[c(d(e[f{g}]))]}"));
+        assert_eq!(parser.read(), 'a');
+        let mut contents1 = parser.read().unwrap::<Brace>().0.into_iter();
+        assert_eq!(contents1.read(), 'b');
+        let mut contents2 = contents1.read().unwrap::<Square>().0.into_iter();
+        assert_eq!(contents2.read(), 'c');
+        let mut contents3 = contents2.read().unwrap::<Round>().0.into_iter();
+        assert_eq!(contents3.read(), 'd');
+        let mut contents4 = contents3.read().unwrap::<Round>().0.into_iter();
+        assert_eq!(contents4.read(), 'e');
+        let mut contents5 = contents4.read().unwrap::<Square>().0.into_iter();
+        assert_eq!(contents5.read(), 'f');
+        let mut contents6 = contents5.read().unwrap::<Brace>().0.into_iter();
+        assert_eq!(contents6.read(), 'g');
+        assert_eq!(contents6.read(), EndOfFile);
+        assert_eq!(contents5.read(), EndOfFile);
+        assert_eq!(contents4.read(), EndOfFile);
+        assert_eq!(contents3.read(), EndOfFile);
+        assert_eq!(contents2.read(), EndOfFile);
+        assert_eq!(contents1.read(), EndOfFile);
+        assert_eq!(parser.read(), EndOfFile);
+    }
 }

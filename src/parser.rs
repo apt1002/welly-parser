@@ -114,7 +114,7 @@ pub trait Stream {
     fn read(&mut self) -> Token;
 
     /// Read all `Token`s, upto and excluding [`EndOfFile`].
-    fn collect(mut self) -> Vec<Token> where Self: Sized {
+    fn read_all(mut self) -> Vec<Token> where Self: Sized {
         let mut ret = Vec::new();
         let mut token = self.read();
         while token != EndOfFile {
