@@ -6,7 +6,7 @@ use std::ops::{Range};
 ///
 /// This will be the last input token a parser receives. Parsers must return it
 /// unchanged.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct EndOfFile;
 
 // ----------------------------------------------------------------------------
@@ -69,8 +69,8 @@ impl Token {
     }
 
     /// Tests whether `self` is [`EndOfFile`].
-    pub fn is_end_of_file(&self) -> bool {
-        self.downcast_copy::<EndOfFile>().is_some()
+    pub fn is<T: 'static>(&self) -> bool {
+        if let Token(_, Ok(t)) = self { t.downcast_ref::<T>().is_some() } else { false }
     }
 
     /// Tests whether `self` marks the end of incomplete source code.
@@ -92,9 +92,15 @@ impl Token {
     }
 }
 
+impl<T: 'static + PartialEq + Sized> std::cmp::PartialEq<T> for Token {
+    fn eq(&self, other: &T) -> bool {
+        if let Token(_, Ok(t)) = self { t.downcast_ref::<T>() == Some(other) } else { false }
+    }
+}
+
 impl fmt::Debug for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.is_end_of_file() { return f.write_str(&"EndOfFile"); }
+        if *self == EndOfFile { return f.write_str(&"EndOfFile"); }
         if self.is_incomplete() { return f.write_str(&"Incomplete"); }
         f.write_fmt(format_args!("Token({}..{})", self.0.start, self.0.end))
     }
@@ -111,7 +117,7 @@ pub trait Stream {
     fn collect(mut self) -> Vec<Token> where Self: Sized {
         let mut ret = Vec::new();
         let mut token = self.read();
-        while !token.is_end_of_file() {
+        while token != EndOfFile {
             ret.push(token);
             token = self.read();
         }

@@ -1,6 +1,6 @@
 use std::any::{Any};
 
-use super::{Location, Token, Stream};
+use super::{EndOfFile, Location, Token, Stream};
 
 pub const MISSING_OPEN: &'static str = "Unmatched close bracket";
 pub const MISSING_CLOSE: &'static str = "Unmatched open bracket";
@@ -50,8 +50,8 @@ impl<
         loop {
             let token = self.read();
             if token.is_incomplete() { return token; }
-            if token.is_end_of_file() { return Token(open_loc, Err(MISSING_CLOSE.into())); }
-            if token.downcast_copy::<char>() == Some(self.close) {
+            if token == EndOfFile { return Token(open_loc, Err(MISSING_CLOSE.into())); }
+            if token == self.close {
                 let loc = Location::union([open_loc, token.0]);
                 let bracket = (&self.new_bracket)(contents);
                 return Token(loc, Ok(bracket));
@@ -101,17 +101,17 @@ mod tests {
             )
         );
         let mut contents1 = parser.read().unwrap::<Round>().0.into_iter();
-        assert_eq!('a', contents1.read().unwrap());
+        assert_eq!(contents1.read(), 'a');
         let mut contents2 = contents1.read().unwrap::<Brace>().0.into_iter();
-        assert_eq!('b', contents2.read().unwrap());
-        assert!(contents2.read().is_end_of_file());
+        assert_eq!(contents2.read(), 'b');
+        assert_eq!(contents2.read(), EndOfFile);
         let mut contents2 = contents1.read().unwrap::<Round>().0.into_iter();
-        assert_eq!('c', contents2.read().unwrap());
-        assert_eq!('d', contents2.read().unwrap());
-        assert!(contents2.read().is_end_of_file());
-        assert!(contents1.read().is_end_of_file());
+        assert_eq!(contents2.read(), 'c');
+        assert_eq!(contents2.read(), 'd');
+        assert_eq!(contents2.read(), EndOfFile);
+        assert_eq!(contents1.read(), EndOfFile);
         let mut contents1 = parser.read().unwrap::<Brace>().0.into_iter();
-        assert!(contents1.read().is_end_of_file());
-        assert!(parser.read().is_end_of_file());
+        assert_eq!(contents1.read(), EndOfFile);
+        assert_eq!(parser.read(), EndOfFile);
     }
 }

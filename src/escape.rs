@@ -83,32 +83,33 @@ impl Parse for Parser {
 #[cfg(test)]
 mod tests {
     use crate::parser;
+    use parser::{EndOfFile};
     use crate::buffer::{Characters};
     use super::*;
 
     #[test]
     fn some_characters() {
         let mut results = parser::Parser::new(Parser, Characters::new("ab"));
-        assert_eq!('a', results.read().unwrap());
-        assert_eq!('b', results.read().unwrap());
-        assert!(results.read().is_end_of_file());
+        assert_eq!(results.read(), 'a');
+        assert_eq!(results.read(), 'b');
+        assert_eq!(results.read(), EndOfFile);
     }
 
     #[test]
     fn some_escapes() {
         let mut results = parser::Parser::new(Parser, Characters::new("a\\nb"));
-        assert_eq!('a', results.read().unwrap());
-        assert_eq!(Sequence('\n'), results.read().unwrap());
-        assert_eq!('b', results.read().unwrap());
-        assert!(results.read().is_end_of_file());
+        assert_eq!(results.read(), 'a');
+        assert_eq!(results.read(), Sequence('\n'));
+        assert_eq!(results.read(), 'b');
+        assert_eq!(results.read(), EndOfFile);
     }
 
     #[test]
     fn bad_escape() {
         let mut results = parser::Parser::new(Parser, Characters::new("a\\b"));
-        assert_eq!('a', results.read().unwrap());
-        assert_eq!(MISSING_SEQUENCE, results.read().unwrap_err());
-        assert_eq!('b', results.read().unwrap());
-        assert!(results.read().is_end_of_file());
+        assert_eq!(results.read(), 'a');
+        assert_eq!(results.read().unwrap_err(), MISSING_SEQUENCE);
+        assert_eq!(results.read(), 'b');
+        assert_eq!(results.read(), EndOfFile);
     }
 }
