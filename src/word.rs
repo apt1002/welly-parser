@@ -1,14 +1,19 @@
-use std::any::{Any};
-use super::{Stream, Context, Parse};
+use super::{Tree, Stream, Context, Parse};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Whitespace(String);
 
+impl Tree for Whitespace {}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Symbol(String);
 
+impl Tree for Symbol {}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Alphanumeric(String);
+
+impl Tree for Alphanumeric {}
 
 // ----------------------------------------------------------------------------
 
@@ -37,8 +42,8 @@ impl CharacterClass {
         }
     }
 
-    /// Combine `self` with `s` to make a [`dyn Any`].
-    fn wrap(self, s: String) -> Box<dyn Any> {
+    /// Combine `self` with `s` to make a [`dyn Tree`].
+    fn wrap(self, s: String) -> Box<dyn Tree> {
         use CharacterClass::*;
         match self {
             WHITESPACE => Box::new(Whitespace(s)),
@@ -57,7 +62,7 @@ impl Parse for Parser {
     fn parse(
         &self,
         input: &mut Context<impl Stream>,
-    ) -> Result<Box<dyn Any>, String> {
+    ) -> Result<Box<dyn Tree>, String> {
         if let Some(c) = input.read::<char>()? {
             if let Some(cc) = CharacterClass::classify(*c) {
                 let mut s = String::new();

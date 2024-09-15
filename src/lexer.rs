@@ -1,14 +1,19 @@
-use std::any::{Any};
-use super::{escape, Stream, Context, Parse};
+use super::{escape, Tree, Stream, Context, Parse};
 
 #[derive(Debug, Clone)]
 pub struct Comment;
 
+impl Tree for Comment {}
+
 #[derive(Debug, Clone)]
 pub struct CharacterLiteral(char);
 
+impl Tree for CharacterLiteral {}
+
 #[derive(Debug, Clone)]
 pub struct StringLiteral(String);
+
+impl Tree for StringLiteral {}
 
 pub const UNTERMINATED_BLOCK_COMMENT: &'static str = "Unterminated block comment";
 pub const UNTERMINATED_STRING: &'static str = "Unterminated string";
@@ -26,7 +31,7 @@ impl Parser {
     fn parse_line_comment(
         &self, input:
         &mut Context<impl Stream>,
-    ) -> Result<Box<dyn Any>, String> {
+    ) -> Result<Box<dyn Tree>, String> {
         loop {
             if let Some(c) = input.read::<char>()? {
                 if *c == '\n' { input.unread(c); break; }
@@ -43,7 +48,7 @@ impl Parser {
     fn parse_block_comment(
         &self, input:
         &mut Context<impl Stream>,
-    ) -> Result<Box<dyn Any>, String> {
+    ) -> Result<Box<dyn Tree>, String> {
         loop {
             if let Some(c) = input.read::<char>()? {
                 if *c == '*' {
@@ -65,7 +70,7 @@ impl Parser {
     fn parse_character_literal(
         &self, input:
         &mut Context<impl Stream>,
-    ) -> Result<Box<dyn Any>, String> {
+    ) -> Result<Box<dyn Tree>, String> {
         let c = if let Some(c) = input.read::<char>()? {
             if *c == '\'' { return Err(MISSING_CHAR.into()); }
             *c
@@ -86,7 +91,7 @@ impl Parser {
     fn parse_string_literal(
         &self, input:
         &mut Context<impl Stream>,
-    ) -> Result<Box<dyn Any>, String> {
+    ) -> Result<Box<dyn Tree>, String> {
         let mut s = String::new();
         loop {
             let c = if let Some(c) = input.read::<char>()? {
@@ -108,7 +113,7 @@ impl Parse for Parser {
     fn parse(
         &self,
         input: &mut Context<impl Stream>,
-    ) -> Result<Box<dyn Any>, String> {
+    ) -> Result<Box<dyn Tree>, String> {
         if let Some(c) = input.read::<char>()? {
             match *c {
                 '/' => if let Some(c2) = input.read::<char>()? {

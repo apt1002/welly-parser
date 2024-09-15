@@ -1,9 +1,10 @@
-use std::any::{Any};
-use super::{Stream, Context, Parse};
+use super::{Tree, Stream, Context, Parse};
 
 /// An escape sequence.
 #[derive(Debug, PartialEq)]
 pub struct Sequence(pub char);
+
+impl Tree for Sequence {}
 
 pub const MISSING_SEQUENCE: &'static str = "Missing escape sequence";
 pub const MISSING_HEX: &'static str = "Expected a hex digit";
@@ -30,7 +31,7 @@ impl Parser {
         &self,
         input: &mut Context<impl Stream>,
         num_digits: usize,
-    ) -> Result<Box<dyn Any>, String> {
+    ) -> Result<Box<dyn Tree>, String> {
         let mut ret: u32 = 0;
         for i in 0..num_digits {
             if let Some(c) = input.read::<char>()? {
@@ -53,7 +54,7 @@ impl Parser {
 }
 
 impl Parse for Parser {
-    fn parse(&self, input: &mut Context<impl Stream>) -> Result<Box<dyn Any>, String> {
+    fn parse(&self, input: &mut Context<impl Stream>) -> Result<Box<dyn Tree>, String> {
         if let Some(c) = input.read::<char>()? {
             if *c != '\\' { return Ok(c); }
         } else {

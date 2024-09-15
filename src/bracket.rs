@@ -1,6 +1,4 @@
-use std::any::{Any};
-
-use super::{EndOfFile, Location, Token, Stream};
+use super::{Tree, EndOfFile, Location, Token, Stream};
 
 pub const MISSING_OPEN: &'static str = "Unmatched close bracket";
 pub const MISSING_CLOSE: &'static str = "Unmatched open bracket";
@@ -11,13 +9,19 @@ pub const MISSING_CLOSE: &'static str = "Unmatched open bracket";
 #[derive(Debug)]
 pub struct Round(Vec<Token>);
 
+impl Tree for Round {}
+
 /// A sequence of [`Token`]s enclosed in square brackets.
 #[derive(Debug)]
 pub struct Square(Vec<Token>);
 
+impl Tree for Square {}
+
 /// A sequence of [`Token`]s enclosed in round brackets.
 #[derive(Debug)]
 pub struct Brace(Vec<Token>);
+
+impl Tree for Brace {}
 
 // ----------------------------------------------------------------------------
 
@@ -32,7 +36,7 @@ pub struct Parser<I, F> {
 
 impl<
     I: Stream,
-    F: Fn(Vec<Token>) -> Box<dyn Any>,
+    F: Fn(Vec<Token>) -> Box<dyn Tree>,
 > Parser<I, F> {
     /// Construct a `bracket::Parser`.
     /// - input - the [`Stream`] from which to read and parse input.
@@ -61,7 +65,7 @@ impl<
     }
 }
 
-impl<I: Stream, F: Fn(Vec<Token>) -> Box<dyn Any>> Stream for Parser<I, F> {
+impl<I: Stream, F: Fn(Vec<Token>) -> Box<dyn Tree>> Stream for Parser<I, F> {
     fn read(&mut self) -> Token {
         let token = self.input.read();
         if let Some(c) = token.downcast_copy::<char>() {

@@ -1,6 +1,7 @@
-use std::any::{Any};
 use std::{fmt};
 use std::ops::{Range};
+
+use super::{Tree};
 
 /// Represents the end of the source code.
 ///
@@ -8,6 +9,8 @@ use std::ops::{Range};
 /// unchanged.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct EndOfFile;
+
+impl Tree for EndOfFile {}
 
 // ----------------------------------------------------------------------------
 
@@ -60,16 +63,16 @@ impl From<Range<usize>> for Location {
 /// - Token(loc, Err(e)) represents an error message `e`.
 ///   `e` can be the empty string to mark the end of incomplete source code.
 ///   In this case, the `Location` is spurious.
-pub struct Token(pub Location, pub Result<Box<dyn Any>, String>);
+pub struct Token(pub Location, pub Result<Box<dyn Tree>, String>);
 
 impl Token {
     /// If `self` is `Token(_, Ok(t))` and `t` is of type `T`, return it.
-    pub fn downcast_copy<T: 'static + Copy>(&self) -> Option<T> {
+    pub fn downcast_copy<T: Tree + Copy>(&self) -> Option<T> {
         if let Token(_, Ok(t)) = self { t.downcast_ref().copied() } else { None }
     }
 
     /// Tests whether `self` is [`EndOfFile`].
-    pub fn is<T: 'static>(&self) -> bool {
+    pub fn is<T: Tree>(&self) -> bool {
         if let Token(_, Ok(t)) = self { t.downcast_ref::<T>().is_some() } else { false }
     }
 
@@ -82,7 +85,7 @@ impl Token {
     /// not of type `T`.
     ///
     /// This is useful in test code.
-    pub fn unwrap<T: 'static>(self) -> T {
+    pub fn unwrap<T: Tree>(self) -> T {
         *self.1.unwrap().downcast::<T>().unwrap()
     }
 
@@ -92,7 +95,7 @@ impl Token {
     }
 }
 
-impl<T: 'static + PartialEq + Sized> std::cmp::PartialEq<T> for Token {
+impl<T: Tree + PartialEq + Sized> std::cmp::PartialEq<T> for Token {
     fn eq(&self, other: &T) -> bool {
         if let Token(_, Ok(t)) = self { t.downcast_ref::<T>() == Some(other) } else { false }
     }
@@ -147,7 +150,7 @@ pub struct Context<I: Stream> {
     /// in reverse order.
     ///
     /// [`input`]: Self::input
-    stack: Vec<(Location, Box<dyn Any>)>,
+    stack: Vec<(Location, Box<dyn Tree>)>,
 
     /// The [`Location`]s of [`Token`]s that have been read but not yet used to
     /// form an output.
@@ -180,7 +183,7 @@ impl<I: Stream> Context<I> {
     /// Read the next [`Token`] and internally record its [`Location`].
     /// - Ok(token) - The mext `Token`, unwrapped.
     /// - Err(msg) - An error prevented parsing of the next `Token`.
-    pub fn read_any(&mut self) -> Result<Box<dyn Any>, String> {
+    pub fn read_any(&mut self) -> Result<Box<dyn Tree>, String> {
         let Token(loc, t) = self.read_inner();
         self.locs.push(loc);
         t
@@ -191,7 +194,7 @@ impl<I: Stream> Context<I> {
     /// - Ok(Some(token)) - The next `Token` is of type `T`.
     /// - Ok(None) - The next `Token` is not a `T`, and has not been read.
     /// - Err(failure) - A [`Failure`] prevented parsing of the next `Token`.
-    pub fn read<T: 'static + Any>(&mut self) -> Result<Option<Box<T>>, String> {
+    pub fn read<T: Tree>(&mut self) -> Result<Option<Box<T>>, String> {
         let t = self.read_any()?;
         Ok(match t.downcast::<T>() {
             Ok(t) => Some(t),
@@ -203,13 +206,13 @@ impl<I: Stream> Context<I> {
     ///
     /// `token` must be the most recent `Token`. It will be returned by the
     /// next call to `read()`.
-    pub fn unread_any(&mut self, token: Box<dyn Any>) {
+    pub fn unread_any(&mut self, token: Box<dyn Tree>) {
         let loc = self.pop();
         self.stack.push((loc, token));
     }
 
     /// Pretend we haven't read the most recent [`Token`].
-    pub fn unread<T: 'static + Any>(&mut self, token: Box<T>) {
+    pub fn unread<T: Tree>(&mut self, token: Box<T>) {
         self.unread_any(token);
     }
 }
@@ -222,7 +225,7 @@ pub trait Parse: Sized {
     fn parse(
         &self,
         input: &mut Context<impl Stream>,
-    ) -> Result<Box<dyn Any>, String>;
+    ) -> Result<Box<dyn Tree>, String>;
 }
 
 // ----------------------------------------------------------------------------
