@@ -6,12 +6,12 @@ pub struct Comment;
 impl Tree for Comment {}
 
 #[derive(Debug, Clone)]
-pub struct CharacterLiteral(char);
+pub struct CharacterLiteral(pub char);
 
 impl Tree for CharacterLiteral {}
 
 #[derive(Debug, Clone)]
-pub struct StringLiteral(String);
+pub struct StringLiteral(pub String);
 
 impl Tree for StringLiteral {}
 

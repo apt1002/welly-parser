@@ -7,19 +7,19 @@ pub const MISSING_CLOSE: &'static str = "Unmatched open bracket";
 
 /// A sequence of [`Token`]s enclosed in round brackets.
 #[derive(Debug)]
-pub struct Round(Vec<Token>);
+pub struct Round(pub Vec<Token>);
 
 impl Tree for Round {}
 
 /// A sequence of [`Token`]s enclosed in square brackets.
 #[derive(Debug)]
-pub struct Square(Vec<Token>);
+pub struct Square(pub Vec<Token>);
 
 impl Tree for Square {}
 
 /// A sequence of [`Token`]s enclosed in round brackets.
 #[derive(Debug)]
-pub struct Brace(Vec<Token>);
+pub struct Brace(pub Vec<Token>);
 
 impl Tree for Brace {}
 
