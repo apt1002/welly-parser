@@ -17,7 +17,7 @@ impl Tree for EndOfFile {}
 /// A position in source code in a form that can be reported to the user.
 /// More precisely, a `Location` represents a contiguous range of bytes of
 /// source code.
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Location {
     /// The byte index where this `Location` begins.
     pub start: usize,
@@ -38,6 +38,12 @@ impl Location {
             ret.end = std::cmp::max(ret.end, piece.end);
         }
         ret
+    }
+}
+
+impl fmt::Debug for Location {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_fmt(format_args!("{}..{}", self.start, self.end))
     }
 }
 
@@ -63,6 +69,7 @@ impl From<Range<usize>> for Location {
 /// - Token(loc, Err(e)) represents an error message `e`.
 ///   `e` can be the empty string to mark the end of incomplete source code.
 ///   In this case, the `Location` is spurious.
+#[derive(Debug)]
 pub struct Token(pub Location, pub Result<Box<dyn Tree>, String>);
 
 impl Token {
@@ -71,7 +78,7 @@ impl Token {
         if let Token(_, Ok(t)) = self { t.downcast_ref().copied() } else { None }
     }
 
-    /// Tests whether `self` is [`EndOfFile`].
+    /// Tests whether `self` is a `T`.
     pub fn is<T: Tree>(&self) -> bool {
         if let Token(_, Ok(t)) = self { t.downcast_ref::<T>().is_some() } else { false }
     }
@@ -95,17 +102,9 @@ impl Token {
     }
 }
 
-impl<T: Tree + PartialEq + Sized> std::cmp::PartialEq<T> for Token {
+impl<T: Tree + PartialEq> std::cmp::PartialEq<T> for Token {
     fn eq(&self, other: &T) -> bool {
         if let Token(_, Ok(t)) = self { t.downcast_ref::<T>() == Some(other) } else { false }
-    }
-}
-
-impl fmt::Debug for Token {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if *self == EndOfFile { return f.write_str(&"EndOfFile"); }
-        if self.is_incomplete() { return f.write_str(&"Incomplete"); }
-        f.write_fmt(format_args!("Token({}..{})", self.0.start, self.0.end))
     }
 }
 
