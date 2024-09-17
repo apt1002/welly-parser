@@ -9,12 +9,12 @@ pub struct Whitespace;
 impl Tree for Whitespace {}
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Symbol(String);
+pub struct Symbol(pub String);
 
 impl Tree for Symbol {}
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Alphanumeric(String);
+pub struct Alphanumeric(pub String);
 
 impl Tree for Alphanumeric {}
 
