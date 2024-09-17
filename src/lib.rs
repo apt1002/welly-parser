@@ -8,9 +8,8 @@ mod parser;
 pub use parser::{EndOfFile, Location, Token, Stream, Context, Parse, Parser};
 
 mod buffer;
-pub use buffer::{Buffer};
+pub use buffer::{Buffer, Characters};
 
-pub mod escape;
 pub mod lexer;
 pub mod word;
 pub mod bracket;

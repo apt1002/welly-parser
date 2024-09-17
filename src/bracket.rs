@@ -88,7 +88,7 @@ impl<I: Stream, F: Fn(Vec<Token>) -> Box<dyn Tree>> Stream for Parser<I, F> {
 
 #[cfg(test)]
 mod tests {
-    use crate::buffer::{Characters};
+    use crate::{Characters};
     use super::*;
 
     #[test]

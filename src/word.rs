@@ -110,7 +110,7 @@ impl Parse for Parser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::buffer::{Characters};
+    use crate::{Characters};
 
     #[derive(Debug, PartialEq)]
     enum Keyword {RETURN, EQUALS}
