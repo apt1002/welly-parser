@@ -1,7 +1,10 @@
+use std::collections::{HashMap};
+use std::{fmt};
+
 use super::{Tree, Stream, Context, Parse};
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Whitespace(String);
+pub struct Whitespace;
 
 impl Tree for Whitespace {}
 
@@ -35,9 +38,12 @@ impl CharacterClass {
     fn classify(c: char) -> Option<Self> {
         use CharacterClass::*;
         match c {
-            '\t' | '\n' | '\r' | ' ' => Some(WHITESPACE),
-            '!' | '$' | '%' | '^' | '&' | '*' | ':' | '@' | '~' | '<' | '>' | '?' | '.' | '/' => Some(SYMBOL),
-            '0'..='9' | 'A'..='Z' | 'a'..='z' | '_' => Some(ALPHANUMERIC),
+            '\t' | '\n' | '\r' | ' ' =>
+                Some(WHITESPACE),
+            '!' | '$' | '%' | '^' | '&' | '*' | '-' | '+' | '=' | ':' | '@' | '~' | '<' | '>' | '?' | '.' | '/' =>
+                Some(SYMBOL),
+            '0'..='9' | 'A'..='Z' | 'a'..='z' | '_' =>
+                Some(ALPHANUMERIC),
             _ => None,
         }
     }
@@ -46,7 +52,7 @@ impl CharacterClass {
     fn wrap(self, s: String) -> Box<dyn Tree> {
         use CharacterClass::*;
         match self {
-            WHITESPACE => Box::new(Whitespace(s)),
+            WHITESPACE => Box::new(Whitespace),
             SYMBOL => Box::new(Symbol(s)),
             ALPHANUMERIC => Box::new(Alphanumeric(s)),
         }
@@ -55,8 +61,23 @@ impl CharacterClass {
 
 // ----------------------------------------------------------------------------
 
-#[derive(Debug, Default)]
-pub struct Parser;
+#[derive(Default)]
+pub struct Parser(HashMap<&'static str, Box<dyn Fn() -> Box<dyn Tree>>>);
+
+impl Parser {
+    pub fn add_keyword(&mut self, name: &'static str, tree: impl 'static + Fn() -> Box<dyn Tree>) {
+        let old = self.0.insert(name, Box::new(tree));
+        assert!(old.is_none(), "Keywords must be distinct");
+    }
+}
+
+impl fmt::Debug for Parser {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_tuple("Parser")
+            .field(&Vec::from_iter(self.0.keys().copied()))
+            .finish()
+    }
+}
 
 impl Parse for Parser {
     fn parse(
@@ -74,12 +95,41 @@ impl Parse for Parser {
                     }
                     s.push(*c);
                 }
-                Ok(cc.wrap(s))
+                Ok(if let Some(f) = self.0.get(&s.as_ref()) { f() } else { cc.wrap(s) })
             } else {
                 Ok(c)
             }
         } else {
             input.read_any()
         }
+    }
+}
+
+// ----------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::buffer::{Characters};
+
+    #[derive(Debug, PartialEq)]
+    enum Keyword {RETURN, EQUALS}
+    use Keyword::*;
+
+    impl Tree for Keyword {}
+
+    #[test]
+    fn keywords() {
+        let mut parser = Parser::default();
+        parser.add_keyword("return", || Box::new(RETURN));
+        parser.add_keyword("==", || Box::new(EQUALS));
+        let mut stream = crate::Parser::new(parser, Characters::new("return foo==69;"));
+        assert_eq!(stream.read(), RETURN);
+        assert_eq!(stream.read(), Whitespace);
+        assert_eq!(stream.read(), Alphanumeric("foo".into()));
+        assert_eq!(stream.read(), EQUALS);
+        assert_eq!(stream.read(), Alphanumeric("69".into()));
+        assert_eq!(stream.read(), ';');
+        assert_eq!(stream.read(), crate::EndOfFile);
     }
 }
