@@ -70,7 +70,7 @@ impl Parser {
                 }
             } else {
                 // E.g. end of file.
-                return Err(UNTERMINATED_BLOCK_COMMENT.into());
+                Err(UNTERMINATED_BLOCK_COMMENT)?
             }
         }
         Ok(Box::new(Comment))
@@ -89,10 +89,10 @@ impl Parser {
                     ret |= d << (i * 4);
                 } else {
                     input.unread(c);
-                    return Err(MISSING_HEX.into());
+                    Err(MISSING_HEX)?
                 }
             } else {
-                return Err(MISSING_HEX.into());
+                Err(MISSING_HEX)?
             }
         }
         char::from_u32(ret).ok_or_else(|| INVALID.into())
@@ -111,7 +111,7 @@ impl Parser {
         if let Some(c) = input.read::<char>()? {
             if *c != '\\' { return Ok((*c, false)); }
         } else {
-            return Err(if_missing.into());
+            Err(if_missing)?
         }
         // We've read a backslash.
         if let Some(c) = input.read::<char>()? {
@@ -128,7 +128,7 @@ impl Parser {
                 _ => { input.unread(c); },
             }
         }
-        return Err(MISSING_SEQUENCE.into());
+        Err(MISSING_SEQUENCE)?
         
     }
 
@@ -138,11 +138,11 @@ impl Parser {
         input: &mut Context<impl Stream>,
     ) -> Result<Box<dyn Tree>, String> {
         let (c, is_escaped) = self.parse_char(input, MISSING_CHAR)?;
-        if c == '\'' && !is_escaped { return Err(MISSING_CHAR.into()); }
+        if c == '\'' && !is_escaped { Err(MISSING_CHAR)? }
         if let Some(c2) = input.read::<char>()? {
-            if *c2 != '\'' { input.unread(c2); return Err(UNTERMINATED_CHAR.into()); }
+            if *c2 != '\'' { input.unread(c2); Err(UNTERMINATED_CHAR)? }
         } else {
-            return Err(UNTERMINATED_CHAR.into());
+            Err(UNTERMINATED_CHAR)?
         }
         Ok(Box::new(CharacterLiteral(c)))
     }

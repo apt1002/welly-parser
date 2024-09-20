@@ -89,7 +89,7 @@ impl Parser {
     ) -> Result<Expr, String> {
         skip(input)?;
         let name = input.read::<Alphanumeric>()?.map(|name| name.0);
-        let args = *input.read::<Round>()?.ok_or_else(|| String::from(MISSING_ARGS))?;
+        let args = *input.read::<Round>()?.ok_or_else(|| MISSING_ARGS)?;
         skip(input)?;
         let return_type = if let Some(c) = input.read::<char>()? {
             if *c == ':' {
@@ -99,7 +99,7 @@ impl Parser {
                 } else if let Some(round) = input.read::<Round>()? {
                     Some(Box::new(Expr::Round(*round)))
                 } else {
-                    return Err(MISSING_RETURN_TYPE.into());
+                    Err(MISSING_RETURN_TYPE)?
                 }
             } else {
                 input.unread(c);

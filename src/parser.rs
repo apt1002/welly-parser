@@ -192,7 +192,7 @@ impl<I: Stream> Context<I> {
     /// only if its payload is of type `T`.
     /// - Ok(Some(token)) - The next `Token` is of type `T`.
     /// - Ok(None) - The next `Token` is not a `T`, and has not been read.
-    /// - Err(failure) - A [`Failure`] prevented parsing of the next `Token`.
+    /// - Err(message) - An error prevented parsing of the next `Token`.
     pub fn read<T: Tree>(&mut self) -> Result<Option<Box<T>>, String> {
         let t = self.read_any()?;
         Ok(match t.downcast::<T>() {
