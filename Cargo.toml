@@ -1,8 +1,13 @@
 [package]
-name = "wparser"
+name = "welly-parser"
 version = "0.1.0"
+authors = ["Alistair Turnbull <welly@minworks.co.uk>"]
+rust-version = "1.65" # The version in Debian Bookworm.
+description = "An artisinal parser for the Welly programming language"
+homepage = "https://wellylang.org"
+license = "BSD-2-Clause"
+keywords = ["parser", "welly"]
+categories = ["compilers", "parsing"]
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
