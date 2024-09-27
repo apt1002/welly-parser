@@ -2,7 +2,7 @@
 name = "welly-parser"
 version = "0.1.0"
 authors = ["Alistair Turnbull <welly@minworks.co.uk>"]
-rust-version = "1.65" # The version in Debian Bookworm.
+rust-version = "1.63" # The version in Debian Bookworm.
 description = "An artisinal parser for the Welly programming language"
 homepage = "https://wellylang.org"
 license = "BSD-2-Clause"

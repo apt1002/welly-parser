@@ -1,6 +1,6 @@
 # welly-parser
 
-An artisinal parser for the Welly programming language.
+An artisanal parser for the Welly programming language.
 
 It's a recursive descent parser, hand-written (i.e. not using a parser library). It should be fast by design, but I haven't put any effort into optimising it.
 
