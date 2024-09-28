@@ -180,7 +180,8 @@ impl<I: Stream> Context<I> {
     }
 
     /// Read the next [`Token`] and internally record its [`Location`].
-    /// - Ok(token) - The mext `Token`, unwrapped.
+    ///
+    /// - Ok(token) - The next `Token`, unwrapped.
     /// - Err(msg) - An error prevented parsing of the next `Token`.
     pub fn read_any(&mut self) -> Result<Box<dyn Tree>, String> {
         let Token(loc, t) = self.read_inner();
@@ -190,15 +191,30 @@ impl<I: Stream> Context<I> {
 
     /// Read the next [`Token`] and internally record its [`Location`], but
     /// only if its payload is of type `T`.
+    ///
     /// - Ok(Some(token)) - The next `Token` is of type `T`.
     /// - Ok(None) - The next `Token` is not a `T`, and has not been read.
     /// - Err(message) - An error prevented parsing of the next `Token`.
     pub fn read<T: Tree>(&mut self) -> Result<Option<Box<T>>, String> {
-        let t = self.read_any()?;
-        Ok(match t.downcast::<T>() {
+        Ok(match self.read_any()?.downcast::<T>() {
             Ok(t) => Some(t),
             Err(t) => { self.unread_any(t); None },
         })
+    }
+
+    /// Read the next [`Token`] and internally record its [`Location`], but
+    /// only if it `is_wanted`.
+    /// - Ok(Some(token)) - If `is_wanted(token)`.
+    /// - Ok(None) - The next `Token` is not a `T` or is unwanted.
+    ///   It has been `unread()`.
+    /// - Err(message) - An error prevented parsing of the next `Token`.
+    pub fn read_if<T: Tree>(
+        &mut self,
+        is_wanted: impl FnOnce(&T) -> bool,
+    ) -> Result<Option<Box<T>>, String> {
+        Ok(self.read::<T>()?.and_then(
+            |t| if is_wanted(&*t) { Some(t) } else { self.unread(t); None }
+        ))
     }
 
     /// Pretend we haven't read the most recent [`Token`].

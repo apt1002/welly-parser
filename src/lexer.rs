@@ -44,14 +44,7 @@ impl Parser {
         &self,
         input: &mut Context<impl Stream>,
     ) -> Result<Box<dyn Tree>, String> {
-        loop {
-            if let Some(c) = input.read::<char>()? {
-                if *c == '\n' { input.unread(c); break; }
-            } else {
-                // E.g. end of file.
-                break;
-            }
-        }
+        while input.read_if::<char>(|&c| c != '\n')?.is_some() {}
         Ok(Box::new(Comment))
     }
 
@@ -63,10 +56,7 @@ impl Parser {
         loop {
             if let Some(c) = input.read::<char>()? {
                 if *c == '*' {
-                    if let Some(c2) = input.read::<char>()? {
-                        if *c2 == '/' { break; }
-                        input.unread(c2);
-                    }
+                    if input.read_if::<char>(|&c| c == '/')?.is_some() { break; }
                 }
             } else {
                 // E.g. end of file.

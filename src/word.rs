@@ -90,14 +90,17 @@ impl Parse for Parser {
             if let Some(cc) = CharacterClass::classify(*c) {
                 let mut s = String::new();
                 s.push(*c);
-                while let Some(c) = input.read::<char>()? {
-                    if CharacterClass::classify(*c) != Some(cc) {
-                        input.unread(c);
-                        break;
-                    }
+                while let Some(c) = input.read_if(
+                    |&c| CharacterClass::classify(c) == Some(cc)
+                )? {
                     s.push(*c);
                 }
-                Ok(if let Some(f) = self.0.get(&s.as_ref()) { f() } else { cc.wrap(s) })
+                Ok(if let Some(f) = self.0.get(&s.as_ref()) {
+                    f()
+                } else {
+                    s.shrink_to_fit();
+                    cc.wrap(s)
+                })
             } else {
                 Ok(c)
             }
