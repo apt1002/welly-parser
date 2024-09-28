@@ -1,10 +1,10 @@
-use super::{Precedence, Op, Expr};
+use super::{Precedence, Op, MaybeExpr, Expr};
 
 /// Represents an [`Op`] that is missing its right operand.
 #[derive(Debug)]
 pub struct Waiting {
     /// The left operand, if any.
-    expr: Option<Box<Expr>>,
+    expr: MaybeExpr,
 
     /// The `Op`.
     op: Op,
@@ -25,7 +25,7 @@ pub struct Stack {
     ops: Vec<Waiting>,
 
     /// The final `Expr`, if any.
-    expr: Option<Box<Expr>>,
+    expr: MaybeExpr,
 }
 
 impl Stack {
@@ -58,7 +58,7 @@ impl Stack {
     }
 
     /// Collapse this `Stack` down to a single [`Expr`], if non-empty.
-    pub fn flush(mut self) -> Option<Box<Expr>> {
+    pub fn flush(mut self) -> MaybeExpr {
         let mut ret = self.expr;
         while let Some(Waiting {expr, op, ..}) = self.ops.pop() {
             ret = Some(Box::new(Expr::Op(expr, op, ret)));
@@ -92,7 +92,7 @@ impl Stack {
     }
 
     /// Append a non-[`Op`] that has a left operand.
-    pub fn postfix(&mut self, left: Precedence, postfix: impl FnOnce(Option<Box<Expr>>) -> Expr) {
+    pub fn postfix(&mut self, left: Precedence, postfix: impl FnOnce(MaybeExpr) -> Expr) {
         self.partial_flush(left);
         let expr = postfix(self.expr.take());
         self.expr = Some(Box::new(expr));

@@ -30,6 +30,9 @@ pub const MISSING_RETURN_TYPE: &'static str = "Missing function return type";
 
 // ----------------------------------------------------------------------------
 
+/// Represents a possibly missing [`Expr`].
+pub type MaybeExpr = Option<Box<Expr>>;
+
 /// Represents an expression.
 #[derive(Debug)]
 pub enum Expr {
@@ -46,16 +49,16 @@ pub enum Expr {
     Round(Round),
 
     /// A function or function type literal.
-    Function(Option<String>, Round, Option<Box<Expr>>, Option<Brace>),
+    Function(Option<String>, Round, MaybeExpr, Option<Brace>),
 
     /// A keyword operator applied to zero, one or two operands.
-    Op(Option<Box<Expr>>, Op, Option<Box<Expr>>),
+    Op(MaybeExpr, Op, MaybeExpr),
 
     /// Field access.
-    Field(Option<Box<Expr>>, String),
+    Field(MaybeExpr, String),
 
     /// Function or macro call.
-    Call(Option<Box<Expr>>, Round),
+    Call(MaybeExpr, Round),
 }
 
 impl Tree for Expr {}
