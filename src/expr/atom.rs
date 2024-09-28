@@ -7,11 +7,8 @@ use super::{Tree, Op};
 /// the operator is preceded by an expression.
 ///
 /// If the operator has only one meaning, we put it in both slots.
-#[derive(Debug)]
-pub struct Info {
-    /// The textual representation of the operator.
-    pub name: &'static str,
-
+#[derive(Debug, Copy, Clone)]
+pub struct Operator {
     /// The meaning of the operator if has a left operand.
     pub with_left: Op,
 
@@ -19,48 +16,45 @@ pub struct Info {
     pub without_left: Op,
 }
 
-impl Info {
-    /// Make an `Info` describing an operator that has two meanings.
-    pub const fn new_ambiguous(name: &'static str, with_left: Op, without_left: Op) -> Self {
-        Self {name, with_left, without_left }
+impl Operator {
+    /// Make an `Operator` describing an operator that has two meanings.
+    pub const fn new_ambiguous(with_left: Op, without_left: Op) -> Self {
+        Self {with_left, without_left }
     }
 
-    /// Make an `Info` describing an operator that has one meaning.
-    pub const fn new(name: &'static str, op: Op) -> Self { Self::new_ambiguous(name, op, op) }
+    /// Make an `Operator` describing an operator that has one meaning.
+    pub const fn new(op: Op) -> Self { Self::new_ambiguous(op, op) }
 }
 
-pub const ALL_OPERATORS: &'static [Info] = &[
-    Info::new(":", Op::Cast),
-    Info::new("..", Op::Exclusive),
-    Info::new("...", Op::Inclusive),
-    Info::new("or", Op::BoolOr),
-    Info::new("and", Op::BoolAnd),
-    Info::new("not", Op::BoolNot),
-    Info::new("|", Op::BitOr),
-    Info::new("^", Op::BitXor),
-    Info::new_ambiguous("&", Op::BitAnd, Op::Borrow),
-    Info::new("==", Op::EQ),
-    Info::new("!=", Op::NE),
-    Info::new("<", Op::LT),
-    Info::new(">", Op::GT),
-    Info::new("<=", Op::LE),
-    Info::new(">=", Op::GE),
-    Info::new("<>", Op::LG),
-    Info::new("<<", Op::SL),
-    Info::new(">>", Op::ASR),
-    Info::new(">>>", Op::LSR),
-    Info::new_ambiguous("+", Op::Add, Op::Plus),
-    Info::new_ambiguous("-", Op::Sub, Op::Minus),
-    Info::new_ambiguous("*", Op::Mul, Op::Clone),
-    Info::new("/", Op::Div),
-    Info::new("%", Op::Rem),
-    Info::new("**", Op::Pow),
-    Info::new("~", Op::BitNot),
-    Info::new("$", Op::Share),
-    Info::new("?", Op::Query),
-];
-
-/// The parse tree of a built-in operator.
-pub type Operator = &'static Info;
-
-impl Tree for Operator {}
+impl Tree for Operator {
+    fn declare_keywords(mut declare: impl FnMut(&'static str, Self)) {
+        declare(":", Operator::new(Op::Cast));
+        declare("..", Operator::new(Op::Exclusive));
+        declare("...", Operator::new(Op::Inclusive));
+        declare("or", Operator::new(Op::BoolOr));
+        declare("and", Operator::new(Op::BoolAnd));
+        declare("not", Operator::new(Op::BoolNot));
+        declare("|", Operator::new(Op::BitOr));
+        declare("^", Operator::new(Op::BitXor));
+        declare("&", Operator::new_ambiguous(Op::BitAnd, Op::Borrow));
+        declare("==", Operator::new(Op::EQ));
+        declare("!=", Operator::new(Op::NE));
+        declare("<", Operator::new(Op::LT));
+        declare(">", Operator::new(Op::GT));
+        declare("<=", Operator::new(Op::LE));
+        declare(">=", Operator::new(Op::GE));
+        declare("<>", Operator::new(Op::LG));
+        declare("<<", Operator::new(Op::SL));
+        declare(">>", Operator::new(Op::ASR));
+        declare(">>>", Operator::new(Op::LSR));
+        declare("+", Operator::new_ambiguous(Op::Add, Op::Plus));
+        declare("-", Operator::new_ambiguous(Op::Sub, Op::Minus));
+        declare("*", Operator::new_ambiguous(Op::Mul, Op::Clone));
+        declare("/", Operator::new(Op::Div));
+        declare("%", Operator::new(Op::Rem));
+        declare("**", Operator::new(Op::Pow));
+        declare("~", Operator::new(Op::BitNot));
+        declare("$", Operator::new(Op::Share));
+        declare("?", Operator::new(Op::Query));
+    }
+}

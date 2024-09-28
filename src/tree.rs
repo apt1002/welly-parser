@@ -14,7 +14,10 @@ impl<T: Any> AsAny for T {
 // ----------------------------------------------------------------------------
 
 /// A type that represents a parse tree.
-pub trait Tree: fmt::Debug + AsAny {}
+pub trait Tree: fmt::Debug + AsAny {
+    /// `declare()` all the keywords whose parse trees are `Self`s.
+    fn declare_keywords(#[allow(unused)] declare: impl FnMut(&'static str, Self)) where Self: Sized {}
+}
 
 impl dyn Tree {
     pub fn is<T: Tree>(&self) -> bool { self.as_any().is::<T>() }

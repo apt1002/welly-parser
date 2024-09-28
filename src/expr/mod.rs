@@ -7,26 +7,26 @@ mod op;
 pub use op::{Precedence, Op};
 
 mod atom;
-pub use atom::{Operator, ALL_OPERATORS};
+pub use atom::{Operator};
 
 mod precedence;
 use precedence::{Stack};
 
-/// The `fn` keyword.
-#[derive(Debug)]
-pub struct Fn;
-
-impl Tree for Fn {}
-
-/// The  `.` character.
-#[derive(Debug)]
-pub struct Dot;
-
-impl Tree for Dot {}
-
 pub const MISSING_FIELD: &'static str = "Missing field name";
 pub const MISSING_ARGS: &'static str = "Missing function arguments";
 pub const MISSING_RETURN_TYPE: &'static str = "Missing function return type";
+
+// ----------------------------------------------------------------------------
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum Keyword { Fn, Dot }
+
+impl Tree for Keyword {
+    fn declare_keywords(mut declare: impl FnMut(&'static str, Self)) {
+        declare("fn", Self::Fn);
+        declare(".", Self::Dot);
+    }
+}
 
 // ----------------------------------------------------------------------------
 
@@ -135,11 +135,16 @@ impl Parse for Parser {
                 }
             } else if let Some(tree) = input.read::<Operator>()? {
                 stack.op(if stack.has_expr() { tree.with_left } else { tree.without_left });
-            } else if let Some(_) = input.read::<Fn>()? {
-                stack.nonfix(self.parse_function(input)?);
-            } else if let Some(_) = input.read::<Dot>()? {
-                let field = self.parse_field(input)?;
-                stack.postfix(Precedence::MAX, |expr| Expr::Field(expr, field.0));
+            } else if let Some(keyword) = input.read::<Keyword>()? {
+                match *keyword {
+                    Keyword::Fn => {
+                        stack.nonfix(self.parse_function(input)?);
+                    },
+                    Keyword::Dot => {
+                        let field = self.parse_field(input)?;
+                        stack.postfix(Precedence::MAX, |expr| Expr::Field(expr, field.0));
+                    },
+                }
             } else if let Some(tree) = input.read::<lexer::CharacterLiteral>()? {
                 stack.nonfix(Expr::Char(tree.0));
             } else if let Some(tree) = input.read::<lexer::StringLiteral>()? {

@@ -65,9 +65,11 @@ impl CharacterClass {
 pub struct Parser(HashMap<&'static str, Box<dyn Fn() -> Box<dyn Tree>>>);
 
 impl Parser {
-    pub fn add_keyword(&mut self, name: &'static str, tree: impl 'static + Fn() -> Box<dyn Tree>) {
-        let old = self.0.insert(name, Box::new(tree));
-        assert!(old.is_none(), "Keywords must be distinct");
+    pub fn add_keywords<T: Tree + Clone>(&mut self) {
+        T::declare_keywords(|name, tree| {
+            let old = self.0.insert(name, Box::new(move || Box::new(tree.clone())));
+            assert!(old.is_none(), "Keyword '{}' has multiple meanings", name);
+        });
     }
 }
 
@@ -112,17 +114,22 @@ mod tests {
     use super::*;
     use crate::{Characters};
 
-    #[derive(Debug, PartialEq)]
+    /// A minimal mock-up of some Welly keywords.
+    #[derive(Debug, Copy, Clone, PartialEq)]
     enum Keyword {RETURN, EQUALS}
     use Keyword::*;
 
-    impl Tree for Keyword {}
+    impl Tree for Keyword {
+        fn declare_keywords(mut declare: impl FnMut(&'static str, Self)) {
+            declare("return", RETURN);
+            declare("==", EQUALS);
+        }
+    }
 
     #[test]
     fn keywords() {
         let mut parser = Parser::default();
-        parser.add_keyword("return", || Box::new(RETURN));
-        parser.add_keyword("==", || Box::new(EQUALS));
+        parser.add_keywords::<Keyword>();
         let mut stream = crate::Parser::new(parser, Characters::new("return foo==69;"));
         assert_eq!(stream.read(), RETURN);
         assert_eq!(stream.read(), Whitespace);
