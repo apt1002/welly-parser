@@ -28,33 +28,34 @@ impl Operator {
 
 impl Tree for Operator {
     fn declare_keywords(mut declare: impl FnMut(&'static str, Self)) {
+        declare("?", Operator::new(Op::Query));
+        declare("**", Operator::new(Op::Pow));
+        declare("~", Operator::new(Op::BitNot));
+        declare("$", Operator::new(Op::Share));
+        declare("*", Operator::new_ambiguous(Op::Mul, Op::Clone));
+        declare("/", Operator::new(Op::Div));
+        declare("%", Operator::new(Op::Rem));
+        declare("+", Operator::new_ambiguous(Op::Add, Op::Plus));
+        declare("-", Operator::new_ambiguous(Op::Sub, Op::Minus));
+        declare("<<", Operator::new(Op::SL));
+        declare(">>", Operator::new(Op::ASR));
+        declare(">>>", Operator::new(Op::LSR));
+        declare("&", Operator::new_ambiguous(Op::BitAnd, Op::Borrow));
+        declare("^", Operator::new(Op::BitXor));
+        declare("|", Operator::new(Op::BitOr));
         declare(":", Operator::new(Op::Cast));
         declare("..", Operator::new(Op::Exclusive));
         declare("...", Operator::new(Op::Inclusive));
-        declare("or", Operator::new(Op::BoolOr));
-        declare("and", Operator::new(Op::BoolAnd));
-        declare("not", Operator::new(Op::BoolNot));
-        declare("|", Operator::new(Op::BitOr));
-        declare("^", Operator::new(Op::BitXor));
-        declare("&", Operator::new_ambiguous(Op::BitAnd, Op::Borrow));
-        declare("==", Operator::new(Op::EQ));
-        declare("!=", Operator::new(Op::NE));
         declare("<", Operator::new(Op::LT));
         declare(">", Operator::new(Op::GT));
         declare("<=", Operator::new(Op::LE));
         declare(">=", Operator::new(Op::GE));
         declare("<>", Operator::new(Op::LG));
-        declare("<<", Operator::new(Op::SL));
-        declare(">>", Operator::new(Op::ASR));
-        declare(">>>", Operator::new(Op::LSR));
-        declare("+", Operator::new_ambiguous(Op::Add, Op::Plus));
-        declare("-", Operator::new_ambiguous(Op::Sub, Op::Minus));
-        declare("*", Operator::new_ambiguous(Op::Mul, Op::Clone));
-        declare("/", Operator::new(Op::Div));
-        declare("%", Operator::new(Op::Rem));
-        declare("**", Operator::new(Op::Pow));
-        declare("~", Operator::new(Op::BitNot));
-        declare("$", Operator::new(Op::Share));
-        declare("?", Operator::new(Op::Query));
+        declare("==", Operator::new(Op::EQ));
+        declare("!=", Operator::new(Op::NE));
+        declare("in", Operator::new(Op::In));
+        declare("not", Operator::new(Op::BoolNot));
+        declare("and", Operator::new(Op::BoolAnd));
+        declare("or", Operator::new(Op::BoolOr));
     }
 }
