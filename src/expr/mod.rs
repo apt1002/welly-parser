@@ -156,3 +156,189 @@ impl Parse for Parser {
         Ok(if let Some(expr) = stack.flush() { expr } else { input.read_any()? })
     }
 }
+
+// ----------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use crate::{bracket, EndOfFile, Characters};
+    use bracket::{Round, Brace};
+    use super::*;
+
+    /// Parse a [`Stream`] containing [`Round`]s and [`Brace`]s into [`Expr`]s.
+    fn expr(input: impl Stream) -> impl Stream {
+        crate::Parser::new(super::Parser, input)
+    }
+
+    /// Parse a [`Stream`] containing [`Brace`]s into [`Round`]s and [`Expr`]s.
+    fn round(input: impl Stream) -> impl Stream {
+        expr(bracket::Parser::new('(', ')', |contents| {
+            let contents = expr(contents.into_iter()).read_all();
+            Box::new(Round(contents))
+        }, input))
+    }
+
+    /// Parse a [`Stream`] into [`Brace`]s, [`Round`]s and [`Expr`]s.
+    fn brace(input: impl Stream) -> impl Stream {
+        round(bracket::Parser::new('{', '}', |contents| {
+            let contents = round(contents.into_iter()).read_all();
+            Box::new(Brace(contents))
+        }, input))
+    }
+
+    /// Parse `source` into a single [`Expr`].
+    fn parse(source: &str) -> Box<Expr> {
+        let stream = Characters::new(source);
+        let stream = crate::Parser::new(lexer::Parser, stream);
+        let mut word_parser = word::Parser::default();
+        word_parser.add_keywords::<Operator>();
+        word_parser.add_keywords::<Keyword>();
+        let stream = crate::Parser::new(word_parser, stream);
+        let mut stream = brace(stream);
+        let result = match stream.read().1 {
+            Ok(tree) => match tree.downcast::<Expr>() {
+                Ok(tree) => tree,
+                Err(tree) => panic!("Got a non-Expr: {:?}", tree),
+            },
+            Err(e) => panic!("Got error: {:?}", e),
+        };
+        assert!(stream.read().is::<EndOfFile>());
+        result
+    }
+
+    /// Check that `e` is of the form `Some(Expr::Op(left, expected, right))`
+    /// and return `(left, right)`.
+    fn check_op(e: impl Into<MaybeExpr>, expected: Op) -> (MaybeExpr, MaybeExpr) {
+        match *e.into().expect("Missing Expr::Op") {
+            Expr::Op(left, observed, right) => {
+                assert_eq!(expected, observed);
+                (left, right)
+            },
+            e => panic!("Expected an Expr::Op but got {:?}", e),
+        }
+    }
+
+    /// Check that `e` is of the form `Some(Expr::Name(expected))`.
+    fn check_name(e: impl Into<MaybeExpr>, expected: &'static str) {
+        match *e.into().expect("Missing Expr::Name") {
+            Expr::Name(observed) => assert_eq!(expected, observed),
+            e => panic!("Expected an Expr::Name but got {:?}", e),
+        }
+    }
+
+    /// Check that `e` is of the form `Some(Expr::Field(object, expected))`
+    /// and return `object`.
+    fn check_field(e: impl Into<MaybeExpr>, expected: &'static str) -> MaybeExpr {
+        match *e.into().expect("Missing Expr::Field") {
+            Expr::Field(object, observed) => {
+                assert_eq!(expected, observed);
+                object
+            },
+            e => panic!("Expected an Expr::Name but got {:?}", e),
+        }
+    }
+
+    #[test]
+    fn missing() {
+        let tree = parse("a b");
+        println!("tree = {:#?}", tree);
+        let (a, b) = check_op(tree, Op::Missing);
+        check_name(a, "a");
+        check_name(b, "b");
+    }
+
+    #[test]
+    fn ergonomics1() {
+        let tree = parse("item in low .. high and condition");
+        println!("tree = {:#?}", tree);
+        let (tree, condition) = check_op(tree, Op::BoolAnd);
+        check_name(condition, "condition");
+        let (item, tree) = check_op(tree, Op::In);
+        check_name(item, "item");
+        let (low, high) = check_op(tree, Op::Exclusive);
+        check_name(low, "low");
+        check_name(high, "high");
+    }
+
+    #[test]
+    fn ergonomics2() {
+        let tree = parse("0 == x & 1 << 4");
+        println!("tree = {:#?}", tree);
+        let (zero, tree) = check_op(tree, Op::EQ);
+        check_name(zero, "0");
+        let (x, tree) = check_op(tree, Op::BitAnd);
+        check_name(x, "x");
+        let (one, four) = check_op(tree, Op::SL);
+        check_name(one, "1");
+        check_name(four, "4");
+    }
+
+    #[test]
+    fn ergonomics3() {
+        let tree = parse("-x ** 2");
+        println!("tree = {:#?}", tree);
+        let (none, tree) = check_op(tree, Op::Minus);
+        assert!(none.is_none());
+        let (x, two) = check_op(tree, Op::Pow);
+        check_name(x, "x");
+        check_name(two, "2");
+    }
+
+    #[test]
+    fn ergonomics4() {
+        let tree = parse("x == 1 + y.z");
+        println!("tree = {:#?}", tree);
+        let (x, tree) = check_op(tree, Op::EQ);
+        check_name(x, "x");
+        let (one, tree) = check_op(tree, Op::Add);
+        check_name(one, "1");
+        let y = check_field(tree, "z");
+        check_name(y, "y");
+    }
+
+    #[test]
+    fn ergonomics5() {
+        let tree = parse("1 + 2 * 3");
+        println!("tree = {:#?}", tree);
+        let (one, tree) = check_op(tree, Op::Add);
+        check_name(one, "1");
+        let (two, three) = check_op(tree, Op::Mul);
+        check_name(two, "2");
+        check_name(three, "3");
+    }
+
+    #[test]
+    fn ergonomics6() {
+        let tree = parse("x + 1 << 4 * y");
+        println!("tree = {:#?}", tree);
+        let (left, right) = check_op(tree, Op::SL);
+        let (x, one) = check_op(left, Op::Add);
+        check_name(x, "x");
+        check_name(one, "1");
+        let (four, y) = check_op(right, Op::Mul);
+        check_name(four, "4");
+        check_name(y, "y");
+    }
+
+    #[test]
+    fn ergonomics7() {
+        let tree = parse("low ... high : type");
+        println!("tree = {:#?}", tree);
+        let (low, tree) = check_op(tree, Op::Inclusive);
+        check_name(low, "low");
+        let (high, type_) = check_op(tree, Op::Cast);
+        check_name(high, "high");
+        check_name(type_, "type");
+    }
+
+    #[test]
+    fn ergonomics8() {
+        let tree = parse("x: type >= 0");
+        println!("tree = {:#?}", tree);
+        let (tree, zero) = check_op(tree, Op::GE);
+        check_name(zero, "0");
+        let (x, type_) = check_op(tree, Op::Cast);
+        check_name(x, "x");
+        check_name(type_, "type");
+    }
+}
