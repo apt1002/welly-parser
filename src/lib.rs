@@ -5,7 +5,7 @@ mod tree;
 pub use tree::{Tree};
 
 mod parser;
-pub use parser::{EndOfFile, Location, Token, Stream, Context, Parse, Parser};
+pub use parser::{EndOfFile, Location, Token, Stream, Context, Parse};
 
 mod buffer;
 pub use buffer::{Buffer, Characters};

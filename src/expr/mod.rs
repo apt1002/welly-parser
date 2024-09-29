@@ -167,7 +167,7 @@ mod tests {
 
     /// Parse a [`Stream`] containing [`Round`]s and [`Brace`]s into [`Expr`]s.
     fn expr(input: impl Stream) -> impl Stream {
-        crate::Parser::new(super::Parser, input)
+        Parser.parse_stream(input)
     }
 
     /// Parse a [`Stream`] containing [`Brace`]s into [`Round`]s and [`Expr`]s.
@@ -189,11 +189,11 @@ mod tests {
     /// Parse `source` into a single [`Expr`].
     fn parse(source: &str) -> Box<Expr> {
         let stream = Characters::new(source);
-        let stream = crate::Parser::new(lexer::Parser, stream);
+        let stream = lexer::Parser.parse_stream(stream);
         let mut word_parser = word::Parser::default();
         word_parser.add_keywords::<Operator>();
         word_parser.add_keywords::<Keyword>();
-        let stream = crate::Parser::new(word_parser, stream);
+        let stream = word_parser.parse_stream(stream);
         let mut stream = brace(stream);
         let result = match stream.read().1 {
             Ok(tree) => match tree.downcast::<Expr>() {

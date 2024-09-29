@@ -133,7 +133,7 @@ mod tests {
     fn keywords() {
         let mut parser = Parser::default();
         parser.add_keywords::<Keyword>();
-        let mut stream = crate::Parser::new(parser, Characters::new("return foo==69;"));
+        let mut stream = parser.parse_stream(Characters::new("return foo==69;"));
         assert_eq!(stream.read(), RETURN);
         assert_eq!(stream.read(), Whitespace);
         assert_eq!(stream.read(), Alphanumeric("foo".into()));

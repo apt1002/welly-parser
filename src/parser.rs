@@ -5,8 +5,8 @@ use super::{Tree};
 
 /// Represents the end of the source code.
 ///
-/// This will be the last input token a parser receives. Parsers must return it
-/// unchanged.
+/// Parsers must return this [`Tree`] unchanged. It must never be incorporated
+/// into a larger [`Tree`].
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct EndOfFile;
 
@@ -61,9 +61,9 @@ impl From<Range<usize>> for Location {
 
 // ----------------------------------------------------------------------------
 
-/// Represents a parse tree of type `T` or a parse error, with a [`Location`].
+/// Represents a parse [`Tree`] or a parse error, with a [`Location`].
 ///
-/// - Token(loc, Ok(t)) represents a partial parse-tree `t`.
+/// - Token(loc, Ok(t)) represents a parse-tree `t`.
 ///   `t` can be [`EndOfFile`] to represent the end of the source code.
 ///   In this case, the `Location` is spurious.
 /// - Token(loc, Err(e)) represents an error message `e`.
@@ -137,10 +137,11 @@ impl<I: Iterator<Item=Token>> Stream for I {
 
 // ----------------------------------------------------------------------------
 
-/// A wrapper around an input [`Stream`].
+/// A high-level wrapper around an input [`Stream`].
 ///
 /// It handles errors, and tracks the [`Location`]s of the input `Token`s
-/// that could form part of the next output `Token`.
+/// that could form part of the next output `Token`. It also provides an
+/// `unread()` method to pretend that you didn't read a `Token`.
 pub struct Context<I: Stream> {
     /// The input [`Stream`].
     input: I,
@@ -181,7 +182,7 @@ impl<I: Stream> Context<I> {
 
     /// Read the next [`Token`] and internally record its [`Location`].
     ///
-    /// - Ok(token) - The next `Token`, unwrapped.
+    /// - Ok(tree) - The parse [`Tree`] of the next `Token`.
     /// - Err(msg) - An error prevented parsing of the next `Token`.
     pub fn read_any(&mut self) -> Result<Box<dyn Tree>, String> {
         let Token(loc, t) = self.read_inner();
@@ -190,9 +191,9 @@ impl<I: Stream> Context<I> {
     }
 
     /// Read the next [`Token`] and internally record its [`Location`], but
-    /// only if its payload is of type `T`.
+    /// only if its parse [`Tree`] is of type `T`.
     ///
-    /// - Ok(Some(token)) - The next `Token` is of type `T`.
+    /// - Ok(Some(tree)) - The next `Token`'s parse tree is of type `T`.
     /// - Ok(None) - The next `Token` is not a `T`, and has not been read.
     /// - Err(message) - An error prevented parsing of the next `Token`.
     pub fn read<T: Tree>(&mut self) -> Result<Option<Box<T>>, String> {
@@ -204,8 +205,8 @@ impl<I: Stream> Context<I> {
 
     /// Read the next [`Token`] and internally record its [`Location`], but
     /// only if it `is_wanted`.
-    /// - Ok(Some(token)) - If `is_wanted(token)`.
-    /// - Ok(None) - The next `Token` is not a `T` or is unwanted.
+    /// - Ok(Some(tree)) - If `is_wanted(tree)`.
+    /// - Ok(None) - The next `Token`'s parse tree is not a `T` or is unwanted.
     ///   It has been `unread()`.
     /// - Err(message) - An error prevented parsing of the next `Token`.
     pub fn read_if<T: Tree>(
@@ -219,45 +220,57 @@ impl<I: Stream> Context<I> {
 
     /// Pretend we haven't read the most recent [`Token`].
     ///
-    /// `token` must be the most recent `Token`. It will be returned by the
-    /// next call to `read()`.
-    pub fn unread_any(&mut self, token: Box<dyn Tree>) {
+    /// `tree` must be the parse [`Tree`] of the most recent `Token`. It will
+    /// be returned by the next call to `read()`.
+    pub fn unread_any(&mut self, tree: Box<dyn Tree>) {
         let loc = self.pop();
-        self.stack.push((loc, token));
+        self.stack.push((loc, tree));
     }
 
     /// Pretend we haven't read the most recent [`Token`].
-    pub fn unread<T: Tree>(&mut self, token: Box<T>) {
-        self.unread_any(token);
+    pub fn unread<T: Tree>(&mut self, tree: Box<T>) {
+        self.unread_any(tree);
     }
 }
 
 // ----------------------------------------------------------------------------
 
-/// Parse a `Self` from a stream of [`Self::Input`]s.
+/// Parse a [`Stream`].
 pub trait Parse: Sized {
-    /// Read input tokens from `input` and try to make a [`Self::Output`].
+    /// Read input [`Tree`]s from `input` and try to make a single output tree.
+    ///
+    /// Special cases:
+    /// - An unrecognised input tree should be passed on unchanged.
+    /// - In particular, [`EndOfFile`] should be passed on unchanged. It must
+    ///   never be incorporated into a larger parse tree.
+    /// - If this parser finds a parse error, abandon the current parse tree
+    ///   and return `Err(message)`.
+    /// - If `input` reports a parse error, abandon the current parse tree and
+    ///   pass on the error unchanged.
+    /// - In particular, if `input` reports an incomplete file, pass it on.
     fn parse(
         &self,
         input: &mut Context<impl Stream>,
     ) -> Result<Box<dyn Tree>, String>;
+
+    /// Read [`Token`]s from `input` to make a [`Stream`] of output `Token`s.
+    ///
+    /// To make each output `Token`, the returned `Stream` calls [`parse()`] to
+    /// make a [`Tree`], and annotates it with a [`Location`].
+    fn parse_stream<I: Stream>(self, input: I) -> Parser<Self, I> {
+        Parser {parse: self, input: Context::new(input)}
+    }
 }
 
 // ----------------------------------------------------------------------------
 
-/// An [`Iterator`] that generates items by calling [`Parse::parse()`].
+/// The [`Stream`] returned by `Parse::parse_stream()`.
 pub struct Parser<P: Parse, I: Stream> {
     /// The parsing function.
     parse: P,
 
     /// The input stream.
     input: Context<I>,
-}
-
-impl<P: Parse, I: Stream> Parser<P, I> {
-    pub fn new(parse: P, input: I) -> Self {
-        Self {parse, input: Context::new(input)}
-    }
 }
 
 impl<P: Parse, I: Stream> Stream for Parser<P, I> {
