@@ -217,8 +217,8 @@ impl Parse for Parser {
                     self.parse_control(input, Stmt::For, MISSING_LOOP_BODY)
                 },
                 Keyword::Verb(verb) => {
-                    self.parse_semicolon(input)?;
                     let expr = input.read::<Expr>()?;
+                    self.parse_semicolon(input)?;
                     Ok(Box::new(Stmt::Verb(verb, expr)))
                 },
             }
@@ -230,5 +230,153 @@ impl Parse for Parser {
             // Parse `;` as a missing `Expr`.
             Ok(Box::new(Stmt::Expr(None)))
         } else { input.read_any() }
+    }
+}
+
+// ----------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use crate::{lexer, word, bracket, expr, EndOfFile, Characters};
+    use bracket::{Round, Brace};
+    use super::*;
+
+    /// Parse a [`Stream`] containing [`Brace`]s into [`Round`]s and [`Expr`]s.
+    fn round(input: impl Stream) -> impl Stream {
+        Parser.parse_stream(expr::Parser.parse_stream(bracket::Parser::new('(', ')', |contents| {
+            let contents = expr::Parser.parse_stream(contents.into_iter()).read_all();
+            Box::new(Round(contents))
+        }, input)))
+    }
+
+    /// Parse a [`Stream`] into [`Brace`]s, [`Round`]s and [`Expr`]s.
+    fn brace(input: impl Stream) -> impl Stream {
+        round(bracket::Parser::new('{', '}', |contents| {
+            let contents = round(contents.into_iter()).read_all();
+            Box::new(Brace(contents))
+        }, input))
+    }
+
+    /// Parse `source` into a [`Stream`] containing [`Stmt`]s.
+    fn parse(source: &'static str) -> impl Stream {
+        let stream = Characters::new(source);
+        let stream = lexer::Parser.parse_stream(stream);
+        let mut word_parser = word::Parser::default();
+        word_parser.add_keywords::<Keyword>();
+        word_parser.add_keywords::<AssignOp>();
+        let stream = word_parser.parse_stream(stream);
+        brace(stream)
+    }
+
+    /// Parse `source` into a single [`Stmt`].
+    fn parse_one(source: &'static str) -> Box<Stmt> {
+        let mut stream = parse(source);
+        let result = match stream.read().1 {
+            Ok(tree) => match tree.downcast::<Stmt>() {
+                Ok(tree) => tree,
+                Err(tree) => panic!("Got a non-Stmt: {:?}", tree),
+            },
+            Err(e) => panic!("Got error: {:?}", e),
+        };
+        assert_eq!(stream.read(), EndOfFile);
+        result
+    }
+
+    /// Check that `e` is of the form `Some(Expr::Name(expected))`.
+    fn check_name(e: impl Into<MaybeExpr>, expected: &'static str) {
+        match *e.into().expect("Missing Expr::Name") {
+            Expr::Name(observed) => assert_eq!(expected, observed),
+            e => panic!("Expected an Expr::Name but got {:?}", e),
+        }
+    }
+
+    /// Check that `b` is of the form `{ expected; }`.
+    fn check_brace(b: impl Into<Option<Brace>>, expected: &'static str) {
+        let mut contents = b.into().expect("Missing Brace").0.into_iter();
+        match contents.read().unwrap::<Stmt>() {
+            Stmt::Expr(e) => check_name(e, expected),
+            s => panic!("Expected a Stmt::Expr but got {:#?}", s),
+        }
+        assert_eq!(contents.read(), EndOfFile);
+    }
+
+    #[test]
+    fn print() {
+        let tree = parse_one("print;");
+        println!("tree = {:#?}", tree);
+        match *tree {
+            Stmt::Expr(e) => check_name(e, "print"),
+            s => panic!("Expected a Stmt::Expr but got {:#?}", s),
+        }
+    }
+
+    #[test]
+    fn assign() {
+        let tree = parse_one("x += 1;");
+        println!("tree = {:#?}", tree);
+        match *tree {
+            Stmt::Assign(left, op, right) => {
+                check_name(left, "x");
+                assert_eq!(op, AssignOp::Op(Op::Add));
+                check_name(right, "1");
+            },
+            s => panic!("Expected a Stmt::Assign but got {:#?}", s),
+        }
+    }
+
+    #[test]
+    fn if_() {
+        let tree = parse_one("if b { foo; } else { bar; }");
+        println!("tree = {:#?}", tree);
+        match *tree {
+            Stmt::If(b, then, else_) => {
+                check_name(b, "b");
+                check_brace(then, "foo");
+                check_brace(else_, "bar");
+            },
+            s => panic!("Expected a Stmt::If but got {:#?}", s),
+        }
+    }
+
+    #[test]
+    fn switch() {
+        let tree = parse_one("switch d case FOO { foo; } else { bar; }");
+        println!("tree = {:#?}", tree);
+        match *tree {
+            Stmt::Switch(d, cases, else_) => {
+                check_name(d, "d");
+                let mut cases = cases.into_iter();
+                match cases.next() {
+                    Some(Case(pattern, body)) => {
+                        check_name(pattern, "FOO");
+                        check_brace(body, "foo");
+                    },
+                    _ => panic!("Missing Case"),
+                }
+                assert!(cases.next().is_none());
+                check_brace(else_, "bar");
+            },
+            s => panic!("Expected a Stmt::Switch but got {:#?}", s),
+        }
+    }
+
+    #[test]
+    fn break_() {
+        let tree = parse_one("break;");
+        println!("tree = {:#?}", tree);
+        match *tree {
+            Stmt::Verb(Verb::Break, None) => {},
+            s => panic!("Expected a Stmt::Verb but got {:#?}", s),
+        }
+    }
+
+    #[test]
+    fn return_() {
+        let tree = parse_one("return 42;");
+        println!("tree = {:#?}", tree);
+        match *tree {
+            Stmt::Verb(Verb::Return, ans) => check_name(ans, "42"),
+            s => panic!("Expected a Stmt::Verb but got {:#?}", s),
+        }
     }
 }

@@ -186,15 +186,20 @@ mod tests {
         }, input))
     }
 
-    /// Parse `source` into a single [`Expr`].
-    fn parse(source: &str) -> Box<Expr> {
+    /// Parse `source` into a [`Stream`] containing [`Expr`]s.
+    fn parse(source: &'static str) -> impl Stream {
         let stream = Characters::new(source);
         let stream = lexer::Parser.parse_stream(stream);
         let mut word_parser = word::Parser::default();
         word_parser.add_keywords::<Operator>();
         word_parser.add_keywords::<Keyword>();
         let stream = word_parser.parse_stream(stream);
-        let mut stream = brace(stream);
+        brace(stream)
+    }
+
+    /// Parse `source` into a single [`Expr`].
+    fn parse_one(source: &'static str) -> Box<Expr> {
+        let mut stream = parse(source);
         let result = match stream.read().1 {
             Ok(tree) => match tree.downcast::<Expr>() {
                 Ok(tree) => tree,
@@ -202,7 +207,7 @@ mod tests {
             },
             Err(e) => panic!("Got error: {:?}", e),
         };
-        assert!(stream.read().is::<EndOfFile>());
+        assert_eq!(stream.read(), EndOfFile);
         result
     }
 
@@ -240,7 +245,7 @@ mod tests {
 
     #[test]
     fn missing() {
-        let tree = parse("a b");
+        let tree = parse_one("a b");
         println!("tree = {:#?}", tree);
         let (a, b) = check_op(tree, Op::Missing);
         check_name(a, "a");
@@ -249,7 +254,7 @@ mod tests {
 
     #[test]
     fn ergonomics1() {
-        let tree = parse("item in low .. high and condition");
+        let tree = parse_one("item in low .. high and condition");
         println!("tree = {:#?}", tree);
         let (tree, condition) = check_op(tree, Op::BoolAnd);
         check_name(condition, "condition");
@@ -262,7 +267,7 @@ mod tests {
 
     #[test]
     fn ergonomics2() {
-        let tree = parse("0 == x & 1 << 4");
+        let tree = parse_one("0 == x & 1 << 4");
         println!("tree = {:#?}", tree);
         let (zero, tree) = check_op(tree, Op::EQ);
         check_name(zero, "0");
@@ -275,7 +280,7 @@ mod tests {
 
     #[test]
     fn ergonomics3() {
-        let tree = parse("-x ** 2");
+        let tree = parse_one("-x ** 2");
         println!("tree = {:#?}", tree);
         let (none, tree) = check_op(tree, Op::Minus);
         assert!(none.is_none());
@@ -286,7 +291,7 @@ mod tests {
 
     #[test]
     fn ergonomics4() {
-        let tree = parse("x == 1 + y.z");
+        let tree = parse_one("x == 1 + y.z");
         println!("tree = {:#?}", tree);
         let (x, tree) = check_op(tree, Op::EQ);
         check_name(x, "x");
@@ -298,7 +303,7 @@ mod tests {
 
     #[test]
     fn ergonomics5() {
-        let tree = parse("1 + 2 * 3");
+        let tree = parse_one("1 + 2 * 3");
         println!("tree = {:#?}", tree);
         let (one, tree) = check_op(tree, Op::Add);
         check_name(one, "1");
@@ -309,7 +314,7 @@ mod tests {
 
     #[test]
     fn ergonomics6() {
-        let tree = parse("x + 1 << 4 * y");
+        let tree = parse_one("x + 1 << 4 * y");
         println!("tree = {:#?}", tree);
         let (left, right) = check_op(tree, Op::SL);
         let (x, one) = check_op(left, Op::Add);
@@ -322,7 +327,7 @@ mod tests {
 
     #[test]
     fn ergonomics7() {
-        let tree = parse("low ... high : type");
+        let tree = parse_one("low ... high : type");
         println!("tree = {:#?}", tree);
         let (low, tree) = check_op(tree, Op::Inclusive);
         check_name(low, "low");
@@ -333,7 +338,7 @@ mod tests {
 
     #[test]
     fn ergonomics8() {
-        let tree = parse("x: type >= 0");
+        let tree = parse_one("x: type >= 0");
         println!("tree = {:#?}", tree);
         let (tree, zero) = check_op(tree, Op::GE);
         check_name(zero, "0");
