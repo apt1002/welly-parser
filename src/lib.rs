@@ -63,9 +63,8 @@ impl Parser {
     }
 }
 
-// TODO.
-//mod buffer;
-//pub use buffer::{Buffer};
+mod buffer;
+pub use buffer::{Buffer};
 
 pub fn echo<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<()> {
     let mut line = String::new();
