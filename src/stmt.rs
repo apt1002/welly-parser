@@ -259,7 +259,7 @@ mod tests {
 
     /// Parse `source` into a [`Stream`] containing [`Stmt`]s.
     fn parse(source: &'static str) -> impl Stream {
-        let stream = Characters::new(source);
+        let stream = Characters::new(source, true);
         let stream = lexer::Parser.parse_stream(stream);
         let mut word_parser = word::Parser::default();
         word_parser.add_keywords::<Keyword>();

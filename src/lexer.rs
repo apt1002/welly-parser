@@ -188,7 +188,7 @@ mod tests {
 
     #[test]
     fn line_comment() {
-        let mut stream = Parser.parse_stream(Characters::new("a // b\nc"));
+        let mut stream = Parser.parse_stream(Characters::new("a // b\nc", true));
         assert_eq!(stream.read(), 'a');
         assert_eq!(stream.read(), ' ');
         assert_eq!(stream.read(), Comment);
@@ -199,7 +199,7 @@ mod tests {
 
     #[test]
     fn line_comment_eof() {
-        let mut stream = Parser.parse_stream(Characters::new("a // b"));
+        let mut stream = Parser.parse_stream(Characters::new("a // b", true));
         assert_eq!(stream.read(), 'a');
         assert_eq!(stream.read(), ' ');
         assert_eq!(stream.read(), Comment);
@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn block_comment() {
-        let mut stream = Parser.parse_stream(Characters::new("a /* b */"));
+        let mut stream = Parser.parse_stream(Characters::new("a /* b */", true));
         assert_eq!(stream.read(), 'a');
         assert_eq!(stream.read(), ' ');
         assert_eq!(stream.read(), Comment);
@@ -217,7 +217,7 @@ mod tests {
 
     #[test]
     fn block_comment_eof() {
-        let mut stream = Parser.parse_stream(Characters::new("a /* b"));
+        let mut stream = Parser.parse_stream(Characters::new("a /* b", true));
         assert_eq!(stream.read(), 'a');
         assert_eq!(stream.read(), ' ');
         assert_eq!(stream.read().unwrap_err(), UNTERMINATED_BLOCK_COMMENT);
@@ -226,7 +226,7 @@ mod tests {
 
     #[test]
     fn escapes() {
-        let mut stream = Parser.parse_stream(Characters::new("f(\"h\\\"w\\\"!\", '\n')"));
+        let mut stream = Parser.parse_stream(Characters::new("f(\"h\\\"w\\\"!\", '\n')", true));
         assert_eq!(stream.read(), 'f');
         assert_eq!(stream.read(), '(');
         assert_eq!(stream.read(), StringLiteral("h\"w\"!".into()));
@@ -239,7 +239,7 @@ mod tests {
 
     #[test]
     fn bad_char() {
-        let mut stream = Parser.parse_stream(Characters::new("'\\j'"));
+        let mut stream = Parser.parse_stream(Characters::new("'\\j'", true));
         assert_eq!(stream.read().unwrap_err(), MISSING_SEQUENCE);
         assert_eq!(stream.read(), 'j');
         assert_eq!(stream.read().unwrap_err(), MISSING_CHAR);
@@ -248,7 +248,7 @@ mod tests {
 
     #[test]
     fn bad_str() {
-        let mut stream = Parser.parse_stream(Characters::new("\"a\\j\""));
+        let mut stream = Parser.parse_stream(Characters::new("\"a\\j\"", true));
         assert_eq!(stream.read().unwrap_err(), MISSING_SEQUENCE);
         assert_eq!(stream.read(), 'j');
         assert_eq!(stream.read().unwrap_err(), UNTERMINATED_STRING);
@@ -257,14 +257,14 @@ mod tests {
 
     #[test]
     fn empty_char() {
-        let mut stream = Parser.parse_stream(Characters::new("''"));
+        let mut stream = Parser.parse_stream(Characters::new("''", true));
         assert_eq!(stream.read().unwrap_err(), MISSING_CHAR);
         assert_eq!(stream.read(), EndOfFile);
     }
 
     #[test]
     fn double_char() {
-        let mut stream = Parser.parse_stream(Characters::new("'ab'"));
+        let mut stream = Parser.parse_stream(Characters::new("'ab'", true));
         assert_eq!(stream.read().unwrap_err(), UNTERMINATED_CHAR);
         assert_eq!(stream.read(), 'b');
         assert_eq!(stream.read().unwrap_err(), MISSING_CHAR);

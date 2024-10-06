@@ -101,7 +101,7 @@ mod tests {
                 '{',
                 '}',
                 |contents| Box::new(Brace(contents)),
-                Characters::new("(a{b}(cd)){}")
+                Characters::new("(a{b}(cd)){}", true)
             )
         );
         let mut contents1 = parser.read().unwrap::<Round>().0.into_iter();
@@ -148,7 +148,7 @@ mod tests {
             }, parser))
         }
 
-        let mut parser = brace(Characters::new("a{b[c(d(e[f{g}]))]}"));
+        let mut parser = brace(Characters::new("a{b[c(d(e[f{g}]))]}", true));
         assert_eq!(parser.read(), 'a');
         let mut contents1 = parser.read().unwrap::<Brace>().0.into_iter();
         assert_eq!(contents1.read(), 'b');

@@ -63,6 +63,12 @@ impl From<Range<usize>> for Location {
 pub struct Token(pub Location, pub Result<Box<dyn Tree>, String>);
 
 impl Token {
+    /// Returns an `EndOfFile`, to indicate the end of the source code.
+    fn end_of_file() -> Self { Self(Location::EVERYWHERE, Ok(Box::new(EndOfFile))) }
+
+    /// Returns an empty error message, to indicate incomplete source code.
+    fn incomplete() -> Self { Self(Location::EVERYWHERE, Err("".into())) }
+
     /// If `self` is `Token(_, Ok(t))` and `t` is of type `T`, return it.
     pub fn downcast_copy<T: Tree + Copy>(&self) -> Option<T> {
         if let Token(_, Ok(t)) = self { t.downcast_ref().copied() } else { None }
@@ -87,6 +93,8 @@ impl Token {
     }
 
     /// Discard the [`Location`], panic on `Ok`, return the error message.
+    ///
+    /// This is useful in test code.
     pub fn unwrap_err(self) -> String {
         self.1.unwrap_err()
     }
@@ -127,35 +135,42 @@ impl<I: Iterator<Item=Token>> Stream for I {
 
 // ----------------------------------------------------------------------------
 
-/// An [`Iterator`] (and therefore a [`Stream`]) through a [`str`].
+/// A [`Stream`] through a [`str`].
 ///
 /// The [`Token`]s are `char`s. Their [`Location`]s are relative to the `str`.
-/// The `Stream` is terminated with [`EndOfFile`].
+///
+/// The `Stream` is terminated with [`Token::end_of_file()`] if `is_complete`,
+/// otherwise with [`Token::incomplete()`].
 pub struct Characters<'a> {
     /// An Iterator through the source code.
     chars: Chars<'a>,
 
     /// The byte length of the source code.
     length: usize,
+
+    /// `true` for `Token::end_of_file()`, otherwise `Token::incomplete()`.
+    is_complete: bool,
 }
 
 impl<'a> Characters<'a> {
     /// Iterate through `source`.
-    pub fn new(source: &'a str) -> Self {
-        Self {chars: source.chars(), length: source.len()}
+    ///
+    /// - is_complete - Determines the `Token` appended to the end of `source`.
+    ///   `true` for `Token::end_of_file()`, otherwise `Token::incomplete()`.
+    pub fn new(source: &'a str, is_complete: bool) -> Self {
+        Self {chars: source.chars(), length: source.len(), is_complete}
     }
 
     /// Returns the current byte index in the `str`.
     pub fn index(&self) -> usize { self.length - self.chars.as_str().len() }
 }
 
-impl<'a> Iterator for Characters<'a> {
-    type Item = Token;
-
-    fn next(&mut self) -> Option<Self::Item> {
+impl<'a> Stream for Characters<'a> {
+    fn read(&mut self) -> Token {
         let start = self.index();
-        let c = self.chars.next();
-        let end = self.index();
-        c.map(|c| Token(Location::from(start..end), Ok(Box::new(c))))
+        if let Some(c) = self.chars.next() {
+            let end = self.index();
+            Token(Location {start, end}, Ok(Box::new(c)))
+        } else if self.is_complete { Token::end_of_file() } else { Token::incomplete() }
     }
 }

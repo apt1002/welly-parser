@@ -35,8 +35,11 @@ impl Parser {
     /// Returns a [`Stream`] containing [`Stmt`]s, amidst any unparseable junk.
     ///
     /// [`Location`]s are relative to `source`.
-    pub fn parse<'a>(&'a self, source: &'a str) -> impl 'a + Stream {
-        let stream = Characters::new(source);
+    ///
+    /// - is_complete - Determines the `Token` appended to the end of `source`.
+    ///   `true` for `Token::end_of_file()`, otherwise `Token::incomplete()`.
+    pub fn parse<'a>(&'a self, source: &'a str, is_complete: bool) -> impl 'a + Stream {
+        let stream = Characters::new(source, is_complete);
         let stream = lexer::Parser.parse_stream(stream);
         let stream = (&self.0).parse_stream(stream);
 
@@ -60,8 +63,9 @@ impl Parser {
     }
 }
 
-mod buffer;
-pub use buffer::{Buffer};
+// TODO.
+//mod buffer;
+//pub use buffer::{Buffer};
 
 pub fn echo<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<()> {
     let mut line = String::new();
