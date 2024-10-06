@@ -81,7 +81,7 @@ impl fmt::Debug for Parser {
     }
 }
 
-impl Parse for Parser {
+impl<'a> Parse for &'a Parser {
     fn parse(
         &self,
         input: &mut Context<impl Stream>,
@@ -107,6 +107,15 @@ impl Parse for Parser {
         } else {
             input.read_any()
         }
+    }
+}
+
+impl Parse for Parser {
+    fn parse(
+        &self,
+        input: &mut Context<impl Stream>,
+    ) -> Result<Box<dyn Tree>, String> {
+        (&self).parse(input)
     }
 }
 

@@ -130,6 +130,7 @@ impl<I: Iterator<Item=Token>> Stream for I {
 /// An [`Iterator`] (and therefore a [`Stream`]) through a [`str`].
 ///
 /// The [`Token`]s are `char`s. Their [`Location`]s are relative to the `str`.
+/// The `Stream` is terminated with [`EndOfFile`].
 pub struct Characters<'a> {
     /// An Iterator through the source code.
     chars: Chars<'a>,
