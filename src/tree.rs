@@ -38,3 +38,15 @@ impl dyn Tree {
 
 impl Tree for () {}
 impl Tree for char {}
+
+// ----------------------------------------------------------------------------
+
+/// Represents the end of the source code.
+///
+/// Parsers must return this [`Tree`] unchanged. It must never be incorporated
+/// into a larger [`Tree`].
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct EndOfFile;
+
+impl Tree for EndOfFile {}
+

@@ -2,13 +2,16 @@ use std::{io};
 use io::{BufRead, Write};
 
 mod tree;
-pub use tree::{Tree};
+pub use tree::{Tree, EndOfFile};
+
+mod stream;
+pub use stream::{Location, Token, Stream, Characters};
 
 mod parser;
-pub use parser::{EndOfFile, Location, Token, Stream, Context, Parse};
+pub use parser::{Context, Parse};
 
 mod buffer;
-pub use buffer::{Buffer, Characters};
+pub use buffer::{Buffer};
 
 pub mod lexer;
 pub mod word;

@@ -1,6 +1,4 @@
-use std::str::{Chars};
-
-use super::{Location, Token};
+use super::{Location, Token, Characters};
 
 /// A growable source file.
 pub struct Buffer {
@@ -39,39 +37,5 @@ impl Buffer {
     pub fn parse(&mut self) -> Option<Token> {
         // TODO.
         self.try_parse(|cs: &mut Characters| cs.next())
-    }
-}
-
-// ----------------------------------------------------------------------------
-
-/// An [`Iterator`] through a [`str`] that returns [`Token<char>`]s.
-///
-/// The [`Location`]s in the returned `Token`s are relative to the `str`.
-pub struct Characters<'a> {
-    /// An Iterator through the source code.
-    chars: Chars<'a>,
-
-    /// The byte length of the source code.
-    length: usize,
-}
-
-impl<'a> Characters<'a> {
-    /// Iterate through `source`.
-    pub fn new(source: &'a str) -> Self {
-        Self {chars: source.chars(), length: source.len()}
-    }
-
-    /// Returns the current byte index in the `str`.
-    pub fn index(&self) -> usize { self.length - self.chars.as_str().len() }
-}
-
-impl<'a> Iterator for Characters<'a> {
-    type Item = Token;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let start = self.index();
-        let c = self.chars.next();
-        let end = self.index();
-        c.map(|c| Token(Location::from(start..end), Ok(Box::new(c))))
     }
 }
