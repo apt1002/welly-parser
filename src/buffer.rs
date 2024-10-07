@@ -75,3 +75,66 @@ impl Buffer {
         Some((s.into(), token))
     }
 }
+
+// ----------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn check(
+        source: &'static str,
+        is_complete: bool,
+        expected: impl Into<Vec<&'static str>>,
+        expected_remainder: &'static str,
+    ) {
+        let mut buffer = Buffer::default();
+        buffer.push_str(source);
+        if is_complete { buffer.complete(); }
+        let mut tokens: Vec<String> = Vec::new();
+        while let Some((s, Token(loc, tree))) = buffer.try_parse() {
+            let span = String::from(&s[loc.start..loc.end]);
+            let t = tree.map(|tree| tree.as_any().type_id());
+            println!("{:?}", t);
+            tokens.push(span);
+        }
+        assert_eq!(tokens, expected.into());
+        assert_eq!(buffer.remainder(), expected_remainder);
+    }
+
+    #[test]
+    fn whitespace() {
+        check(" ", true, [], " ");
+    }
+
+    #[test]
+    fn semicolon() {
+        check(" ; ", true, [";"], " ");
+    }
+
+    #[test]
+    fn five() {
+        check(" 5; ", true, ["5;"], " ");
+    }
+
+    #[test]
+    fn if_() {
+        check("if b {}", true, ["if b {}"], "");
+        check("if b {}", false, [], "if b {}");
+        check("if b {};", false, ["if b {}", ";"], "");
+    }
+
+    #[test]
+    fn if_else() {
+        check("if b {} else {}", true, ["if b {} else {}"], "");
+        check("if b {} else {}", false, ["if b {} else {}"], "");
+        check("if b {} else {};", false, ["if b {} else {}", ";"], "");
+    }
+
+    #[test]
+    fn fn_() {
+        check("fn f() {}\nx; y", true, ["fn f() {}\nx;", "y"], "");
+        check("fn f() {}\nx; y", false, ["fn f() {}\nx;"], " y");
+        check("fn f() {};\nx; y", false, ["fn f() {};", "x;"], " y");
+    }
+}
