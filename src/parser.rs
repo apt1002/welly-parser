@@ -111,6 +111,8 @@ pub trait Parse: Sized {
     /// - If `input` reports a parse error, abandon the current parse tree and
     ///   pass on the error unchanged.
     /// - In particular, if `input` reports an incomplete file, pass it on.
+    ///
+    /// [`EndOfFile`]: super::EndOfFile
     fn parse(
         &self,
         input: &mut Context<impl Stream>,
@@ -118,8 +120,9 @@ pub trait Parse: Sized {
 
     /// Read [`Token`]s from `input` to make a [`Stream`] of output `Token`s.
     ///
-    /// To make each output `Token`, the returned `Stream` calls [`parse()`] to
-    /// make a [`Tree`], and annotates it with a [`Location`].
+    /// To make each output `Token`, the returned `Stream` calls
+    /// [`self.parse()`] to make a [`Tree`], and annotates it with a
+    /// [`Location`].
     fn parse_stream<I: Stream>(self, input: I) -> Parser<Self, I> {
         Parser {parse: self, input: Context::new(input)}
     }
@@ -128,6 +131,7 @@ pub trait Parse: Sized {
 // ----------------------------------------------------------------------------
 
 /// The [`Stream`] returned by `Parse::parse_stream()`.
+// TODO: Make private, using a newer version of Rust that supports RPIT.
 pub struct Parser<P: Parse, I: Stream> {
     /// The parsing function.
     parse: P,

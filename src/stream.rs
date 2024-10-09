@@ -64,10 +64,10 @@ pub struct Token(pub Location, pub Result<Box<dyn Tree>, String>);
 
 impl Token {
     /// Returns an `EndOfFile`, to indicate the end of the source code.
-    fn end_of_file() -> Self { Self(Location::EVERYWHERE, Ok(Box::new(EndOfFile))) }
+    pub fn end_of_file() -> Self { Self(Location::EVERYWHERE, Ok(Box::new(EndOfFile))) }
 
     /// Returns an empty error message, to indicate incomplete source code.
-    fn incomplete() -> Self { Self(Location::EVERYWHERE, Err("".into())) }
+    pub fn incomplete() -> Self { Self(Location::EVERYWHERE, Err("".into())) }
 
     /// If `self` is `Token(_, Ok(t))` and `t` is of type `T`, return it.
     pub fn downcast_copy<T: Tree + Copy>(&self) -> Option<T> {
