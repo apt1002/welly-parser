@@ -16,51 +16,14 @@ pub mod bracket;
 pub mod expr;
 pub mod stmt;
 
-/// The main entry point.
-#[derive(Debug)]
-pub struct Parser(word::Parser);
-
-impl Default for Parser {
-    fn default() -> Self {
-        let mut word_parser = word::Parser::default();
-        word_parser.add_keywords::<expr::Operator>();
-        word_parser.add_keywords::<expr::Keyword>();
-        word_parser.add_keywords::<stmt::Keyword>();
-        word_parser.add_keywords::<stmt::AssignOp>();
-        Self(word_parser)
-    }
-}
-
-impl Parser {
-    /// Returns a [`Stream`] containing [`Stmt`]s, amidst any unparseable junk.
-    ///
-    /// [`Location`]s are relative to `source`.
-    ///
-    /// - is_complete - Determines the `Token` appended to the end of `source`.
-    ///   `true` for `Token::end_of_file()`, otherwise `Token::incomplete()`.
-    pub fn parse<'a>(&'a self, source: &'a str, is_complete: bool) -> impl 'a + Stream {
-        let stream = Characters::new(source, is_complete);
-        let stream = lexer::Parser.parse_stream(stream);
-        let stream = (&self.0).parse_stream(stream);
-
-        /// Parse a [`Stream`] containing [`Brace`]s into [`Round`]s and [`Expr`]s.
-        fn round(input: impl Stream) -> impl Stream {
-            stmt::Parser.parse_stream(expr::Parser.parse_stream(bracket::Parser::new('(', ')', |contents| {
-                let contents = expr::Parser.parse_stream(contents.into_iter()).read_all();
-                Box::new(bracket::Round(contents))
-            }, input)))
-        }
-
-        /// Parse a [`Stream`] into [`Brace`]s, [`Round`]s and [`Expr`]s.
-        fn brace(input: impl Stream) -> impl Stream {
-            round(bracket::Parser::new('{', '}', |contents| {
-                let contents = round(contents.into_iter()).read_all();
-                Box::new(bracket::Brace(contents))
-            }, input))
-        }
-
-        brace(stream)
-    }
+/// Returns a parser that replaces all Welly keywords with their parse trees.
+pub fn word_parser() -> word::Parser {
+    let mut ret = word::Parser::default();
+    ret.add_keywords::<expr::Operator>();
+    ret.add_keywords::<expr::Keyword>();
+    ret.add_keywords::<stmt::Keyword>();
+    ret.add_keywords::<stmt::AssignOp>();
+    ret
 }
 
 mod buffer;
