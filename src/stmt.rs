@@ -303,7 +303,6 @@ mod tests {
     #[test]
     fn print() {
         let tree = parse_one("print;");
-        println!("tree = {:#?}", tree);
         match *tree {
             Stmt::Expr(e) => check_name(e, "print"),
             s => panic!("Expected a Stmt::Expr but got {:#?}", s),
@@ -313,7 +312,6 @@ mod tests {
     #[test]
     fn assign() {
         let tree = parse_one("x += 1;");
-        println!("tree = {:#?}", tree);
         match *tree {
             Stmt::Assign(left, op, right) => {
                 check_name(left, "x");
@@ -327,7 +325,6 @@ mod tests {
     #[test]
     fn if_() {
         let tree = parse_one("if b { foo; } else { bar; }");
-        println!("tree = {:#?}", tree);
         match *tree {
             Stmt::If(b, then, else_) => {
                 check_name(b, "b");
@@ -341,7 +338,6 @@ mod tests {
     #[test]
     fn switch() {
         let tree = parse_one("switch d case FOO { foo; } else { bar; }");
-        println!("tree = {:#?}", tree);
         match *tree {
             Stmt::Switch(d, cases, else_) => {
                 check_name(d, "d");
@@ -363,7 +359,6 @@ mod tests {
     #[test]
     fn break_() {
         let tree = parse_one("break;");
-        println!("tree = {:#?}", tree);
         match *tree {
             Stmt::Verb(Verb::Break, None) => {},
             s => panic!("Expected a Stmt::Verb but got {:#?}", s),
@@ -373,7 +368,6 @@ mod tests {
     #[test]
     fn return_() {
         let tree = parse_one("return 42;");
-        println!("tree = {:#?}", tree);
         match *tree {
             Stmt::Verb(Verb::Return, ans) => check_name(ans, "42"),
             s => panic!("Expected a Stmt::Verb but got {:#?}", s),
