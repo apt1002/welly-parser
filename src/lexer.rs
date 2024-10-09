@@ -1,15 +1,32 @@
+//! Welly's lexer.
+
 use super::{Tree, Stream, Context, Parse};
 
+/// Represents a line comment or a block comment.
+///
+/// A line comment begins with `//` and ends before a newline.
+/// A block comment begins with `/*` and ends with `*/`.
+/// The text of the comment can only be retrieved if you know its [`Location`].
+///
+/// [`Location`]: super::Location
 #[derive(Debug, Clone, PartialEq)]
 pub struct Comment;
 
 impl Tree for Comment {}
 
+/// Represents a Welly character literal.
+///
+/// A character literal consists of a single character or escape sequence
+/// enclosed in ASCII `'` characters.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CharacterLiteral(pub char);
 
 impl Tree for CharacterLiteral {}
 
+/// Represents a Welly string literal.
+///
+/// A character literal consists of zero or more characters or escape sequences
+/// enclosed in ASCII `"` characters.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StringLiteral(pub String);
 
@@ -24,6 +41,7 @@ pub const MISSING_SEQUENCE: &'static str = "Missing escape sequence";
 pub const MISSING_HEX: &'static str = "Expected a hex digit";
 pub const INVALID: &'static str = "Invalid unicode scalar value";
 
+/// If `c` is a hexadecimal digit, return its numeric value.
 fn hex_digit_value(c: char) -> Option<u32> {
     match c {
         '0'..='9' => Some((c as u32) - ('0' as u32)),
@@ -35,6 +53,10 @@ fn hex_digit_value(c: char) -> Option<u32> {
 
 // ----------------------------------------------------------------------------
 
+/// A [`Parse`] implementation that recognises [`Comment`]s,
+/// [`CharacterLiteral`]s and [`StringLiteral`]s.
+///
+/// It parses a [`Stream`] that contains [`char`]s.
 #[derive(Debug, Default)]
 pub struct Parser;
 
@@ -59,7 +81,7 @@ impl Parser {
                     if input.read_if::<char>(|&c| c == '/')?.is_some() { break; }
                 }
             } else {
-                // E.g. end of file.
+                // E.g. `EndOfFile`.
                 Err(UNTERMINATED_BLOCK_COMMENT)?
             }
         }
@@ -78,17 +100,19 @@ impl Parser {
                 if let Some(d) = hex_digit_value(*c) {
                     ret |= d << (i * 4);
                 } else {
+                    // `c` is not a digit.
                     input.unread(c);
                     Err(MISSING_HEX)?
                 }
             } else {
+                // E.g. `EndOfFile`.
                 Err(MISSING_HEX)?
             }
         }
         char::from_u32(ret).ok_or_else(|| INVALID.into())
     }
 
-    /// Parse a character or an escape sequence.
+    /// Parse a single character or an escape sequence.
     /// - if_missing - the error message if we don't receive a character.
     /// Returns:
     /// - the `char` value.
@@ -122,7 +146,7 @@ impl Parser {
         
     }
 
-    /// Parse a line comment, starting after the initial `'`.
+    /// Parse a character literal, starting after the initial `'`.
     fn parse_character_literal(
         &self,
         input: &mut Context<impl Stream>,
@@ -137,7 +161,7 @@ impl Parser {
         Ok(Box::new(CharacterLiteral(c)))
     }
 
-    /// Parse a line comment, starting after the initial `"`.
+    /// Parse a string literal, starting after the initial `"`.
     fn parse_string_literal(
         &self,
         input: &mut Context<impl Stream>,

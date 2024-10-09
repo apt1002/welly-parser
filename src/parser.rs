@@ -57,12 +57,12 @@ impl<I: Stream> Context<I> {
     /// only if its parse [`Tree`] is of type `T`.
     ///
     /// - Ok(Some(tree)) - The next `Token`'s parse tree is of type `T`.
-    /// - Ok(None) - The next `Token` is not a `T`, and has not been read.
+    /// - Ok(None) - The next `Token` is not a `T`. It has been `unread()`.
     /// - Err(message) - An error prevented parsing of the next `Token`.
     pub fn read<T: Tree>(&mut self) -> Result<Option<Box<T>>, String> {
         Ok(match self.read_any()?.downcast::<T>() {
             Ok(t) => Some(t),
-            Err(t) => { self.unread_any(t); None },
+            Err(t) => { self.unread(t); None },
         })
     }
 
@@ -85,14 +85,9 @@ impl<I: Stream> Context<I> {
     ///
     /// `tree` must be the parse [`Tree`] of the most recent `Token`. It will
     /// be returned by the next call to `read()`.
-    pub fn unread_any(&mut self, tree: Box<dyn Tree>) {
+    pub fn unread(&mut self, tree: Box<dyn Tree>) {
         let loc = self.pop();
         self.stack.push((loc, tree));
-    }
-
-    /// Pretend we haven't read the most recent [`Token`].
-    pub fn unread<T: Tree>(&mut self, tree: Box<T>) {
-        self.unread_any(tree);
     }
 }
 
@@ -104,13 +99,13 @@ pub trait Parse: Sized {
     ///
     /// Special cases:
     /// - An unrecognised input tree should be passed on unchanged.
-    /// - In particular, [`EndOfFile`] should be passed on unchanged. It must
-    ///   never be incorporated into a larger parse tree.
+    ///   - In particular, [`EndOfFile`] should be passed on unchanged. It must
+    ///     never be incorporated into a larger parse tree.
     /// - If this parser finds a parse error, abandon the current parse tree
     ///   and return `Err(message)`.
     /// - If `input` reports a parse error, abandon the current parse tree and
     ///   pass on the error unchanged.
-    /// - In particular, if `input` reports an incomplete file, pass it on.
+    ///   - In particular, if `input` reports an incomplete file, pass it on.
     ///
     /// [`EndOfFile`]: super::EndOfFile
     fn parse(
@@ -121,10 +116,11 @@ pub trait Parse: Sized {
     /// Read [`Token`]s from `input` to make a [`Stream`] of output `Token`s.
     ///
     /// To make each output `Token`, the returned `Stream` calls
-    /// [`self.parse()`] to make a [`Tree`], and annotates it with a
-    /// [`Location`].
-    fn parse_stream<I: Stream>(self, input: I) -> Parser<Self, I> {
-        Parser {parse: self, input: Context::new(input)}
+    /// [`parse()`] to make a [`Tree`], and annotates it with a [`Location`].
+    ///
+    /// [`parse()`]: Self::parse()
+    fn parse_stream<I: Stream>(self, input: I) -> ParseStream<Self, I> {
+        ParseStream {parse: self, input: Context::new(input)}
     }
 }
 
@@ -132,7 +128,7 @@ pub trait Parse: Sized {
 
 /// The [`Stream`] returned by `Parse::parse_stream()`.
 // TODO: Make private, using a newer version of Rust that supports RPIT.
-pub struct Parser<P: Parse, I: Stream> {
+pub struct ParseStream<P: Parse, I: Stream> {
     /// The parsing function.
     parse: P,
 
@@ -140,7 +136,7 @@ pub struct Parser<P: Parse, I: Stream> {
     input: Context<I>,
 }
 
-impl<P: Parse, I: Stream> Stream for Parser<P, I> {
+impl<P: Parse, I: Stream> Stream for ParseStream<P, I> {
     fn read(&mut self) -> Token {
         match self.parse.parse(&mut self.input) {
             Ok(token) => {

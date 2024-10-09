@@ -1,18 +1,34 @@
+//! Welly's words, including keywords.
+
 use std::collections::{HashMap};
 use std::{fmt};
 
 use super::{Tree, Stream, Context, Parse};
 
+/// Represents a contiguous string of ASCII whitespace characters.
+///
+/// The characters can only be retrieved if you know the `Whitespace`'s
+/// [`Location`].
+///
+/// [`Location`]: super::Location
 #[derive(Debug, Clone, PartialEq)]
 pub struct Whitespace;
 
 impl Tree for Whitespace {}
 
+/// Represents a contiguous string of ASCII symbol characters.
+///
+/// Symbol characters are those which appear in Welly's arithmetic operators.
+/// Brackets, commas and semicolons are not considered to by symbol characters.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Symbol(pub String);
 
 impl Tree for Symbol {}
 
+/// Represents a contiguous string of ASCII alpha-numeric characters.
+///
+/// Underscore is considered to be alpha-numeric. Note that this type can
+/// represent a decimal integer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Alphanumeric(pub String);
 
@@ -61,6 +77,10 @@ impl CharacterClass {
 
 // ----------------------------------------------------------------------------
 
+/// A [`Parse`] implementation that recognises [`Whitespace`]s, [`Symbol`]s and
+/// [`Alphanumeric`]s.
+///
+/// It parses a [`Stream`] that contains [`char`]s.
 #[derive(Default)]
 pub struct Parser(HashMap<&'static str, Box<dyn Fn() -> Box<dyn Tree>>>);
 

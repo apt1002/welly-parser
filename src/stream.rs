@@ -109,11 +109,15 @@ impl<T: Tree + PartialEq> std::cmp::PartialEq<T> for Token {
 // ----------------------------------------------------------------------------
 
 /// Yields [`Token`]s.
+///
+/// Differences from an [`Iterator`]:
+/// - The item type is always [`Token`].
+/// - `read()` always returns an item.
 pub trait Stream {
     /// Read a single `Token`.
     fn read(&mut self) -> Token;
 
-    /// Read all `Token`s, upto and excluding [`EndOfFile`].
+    /// Read and return all `Token`s upto [`EndOfFile`], which is discarded.
     fn read_all(mut self) -> Vec<Token> where Self: Sized {
         let mut ret = Vec::new();
         let mut token = self.read();
@@ -156,7 +160,7 @@ impl<'a> Characters<'a> {
     /// Iterate through `source`.
     ///
     /// - is_complete - Determines the `Token` appended to the end of `source`.
-    ///   `true` for `Token::end_of_file()`, otherwise `Token::incomplete()`.
+    ///   `true` gives `Token::end_of_file()`, otherwise `Token::incomplete()`.
     pub fn new(source: &'a str, is_complete: bool) -> Self {
         Self {chars: source.chars(), length: source.len(), is_complete}
     }

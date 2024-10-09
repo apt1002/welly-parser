@@ -1,6 +1,7 @@
-use super::{bracket, expr, Tree, Stream, Context, Parse};
-use bracket::{Brace};
-use expr::{MaybeExpr, Expr, Op};
+//! Welly's imperative statements.
+
+use super::{welly, Tree, Stream, Context, Parse};
+use welly::{Brace, MaybeExpr, Expr, Op};
 
 pub const MISSING_SEMICOLON: &'static str = "Missing `;`";
 pub const MISSING_ELSE_BODY: &'static str = "Missing `else` body";
@@ -41,7 +42,16 @@ impl Tree for Keyword {
 
 /// An assignment operator, e.g. the `+=` in `x += 1;`.
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum AssignOp { Let, Set, Op(Op) }
+pub enum AssignOp {
+    /// `x = 1` declares the name `x` and initialises it to `1`.
+    Let,
+
+    /// `x := 1` overwrites the value of the name `x` with `1`.
+    Set,
+
+    /// `x += 1` is an abbreviation for `x := x + 1`.
+    Op(Op),
+}
 
 impl Tree for AssignOp {
     fn declare_keywords(mut declare: impl FnMut(&'static str, Self)) {
@@ -66,7 +76,7 @@ impl Tree for AssignOp {
 
 /// Represents an `case` clause.
 ///
-/// Allow the pattern [`Expr`]s to be `None`, though it's an error.
+/// We allow the pattern [`Expr`]s to be `None`, though it's an error.
 #[derive(Debug)]
 pub struct Case(pub MaybeExpr, pub Brace);
 
@@ -118,6 +128,7 @@ impl Tree for Stmt {}
 
 // ----------------------------------------------------------------------------
 
+/// A [`Parse`] implementation that recognises Welly [`Stmt`]s.
 #[derive(Default, Debug)]
 pub struct Parser;
 
@@ -237,31 +248,31 @@ impl Parse for Parser {
 
 #[cfg(test)]
 mod tests {
-    use crate::{lexer, word, bracket, expr, EndOfFile, Characters};
-    use bracket::{Round, Brace};
     use super::*;
+    use crate::{welly, parsers, EndOfFile, Characters, Brackets};
+    use welly::{Round, Brace};
 
     /// Parse a [`Stream`] containing [`Brace`]s into [`Round`]s and [`Expr`]s.
     fn round(input: impl Stream) -> impl Stream {
-        Parser.parse_stream(expr::Parser.parse_stream(bracket::Parser::new('(', ')', |contents| {
-            let contents = expr::Parser.parse_stream(contents.into_iter()).read_all();
-            Box::new(Round(contents))
+        Parser.parse_stream(parsers::EXPR.parse_stream(Brackets::new('(', ')', |contents| {
+            let contents = parsers::EXPR.parse_stream(contents.into_iter()).read_all();
+            Round::new(contents)
         }, input)))
     }
 
     /// Parse a [`Stream`] into [`Brace`]s, [`Round`]s and [`Expr`]s.
     fn brace(input: impl Stream) -> impl Stream {
-        round(bracket::Parser::new('{', '}', |contents| {
+        round(Brackets::new('{', '}', |contents| {
             let contents = round(contents.into_iter()).read_all();
-            Box::new(Brace(contents))
+            Brace::new(contents)
         }, input))
     }
 
     /// Parse `source` into a [`Stream`] containing [`Stmt`]s.
     fn parse(source: &'static str) -> impl Stream {
         let stream = Characters::new(source, true);
-        let stream = lexer::Parser.parse_stream(stream);
-        let mut word_parser = word::Parser::default();
+        let stream = parsers::LEXER.parse_stream(stream);
+        let mut word_parser = parsers::Word::default();
         word_parser.add_keywords::<Keyword>();
         word_parser.add_keywords::<AssignOp>();
         let stream = word_parser.parse_stream(stream);

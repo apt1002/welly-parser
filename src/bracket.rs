@@ -1,3 +1,5 @@
+//! Welly's bracket matcher.
+
 use super::{Tree, EndOfFile, Location, Token, Stream};
 
 pub const MISSING_OPEN: &'static str = "Unmatched close bracket";
@@ -6,27 +8,57 @@ pub const MISSING_CLOSE: &'static str = "Unmatched open bracket";
 // ----------------------------------------------------------------------------
 
 /// A sequence of [`Token`]s enclosed in round brackets.
+///
+/// The contents should be comma-separated [`Expr`]s, but we allow anything,
+/// including errors.
+///
+/// [`Expr`]: super::welly::Expr
 #[derive(Debug)]
 pub struct Round(pub Vec<Token>);
+
+impl Round {
+    pub fn new(contents: Vec<Token>) -> Box<Self> { Box::new(Self(contents)) }
+}
 
 impl Tree for Round {}
 
 /// A sequence of [`Token`]s enclosed in square brackets.
+///
+/// The contents should be comma-separated [`Expr`]s, but we allow anything,
+/// including errors.
+///
+/// [`Expr`]: super::welly::Expr
 #[derive(Debug)]
 pub struct Square(pub Vec<Token>);
 
+impl Square {
+    pub fn new(contents: Vec<Token>) -> Box<Self> { Box::new(Self(contents)) }
+}
+
 impl Tree for Square {}
 
-/// A sequence of [`Token`]s enclosed in round brackets.
+/// A sequence of [`Token`]s enclosed in curly brackets.
+///
+/// The contents should be [`Stmt`]s, but we allow anything, including errors.
+///
+/// [`Stmt`]: super::welly::Stmt
 #[derive(Debug)]
 pub struct Brace(pub Vec<Token>);
+
+impl Brace {
+    pub fn new(contents: Vec<Token>) -> Box<Self> { Box::new(Self(contents)) }
+}
 
 impl Tree for Brace {}
 
 // ----------------------------------------------------------------------------
 
-/// A parser that matches brackets.
-pub struct Parser<I, F> {
+/// A [`Stream`] that matches nested brackets.
+///
+/// Note that this is not a [`Parse`] implementation, because it is recursive.
+///
+/// [`Parse`]: super::Parse
+pub struct Brackets<F, I> {
     open: char,
     close: char,
     new_bracket: F,
@@ -35,20 +67,20 @@ pub struct Parser<I, F> {
 }
 
 impl<
-    I: Stream,
     F: Fn(Vec<Token>) -> Box<dyn Tree>,
-> Parser<I, F> {
-    /// Construct a `bracket::Parser`.
-    /// - input - the [`Stream`] from which to read and parse input.
+    I: Stream,
+> Brackets<F, I> {
+    /// Construct a [`Brackets`].
     /// - open - the [`char`] used to open a bracket.
     /// - close - the [`char`] used to close a bracket.
     /// - new_bracket - turns bracket contents into a bracket value.
+    ///   The bracket contents are read from `Self`.
+    /// - input - a [`Stream`] that contains [`char`]s.
     pub fn new(open: char, close: char, new_bracket: F, input: I) -> Self {
         Self {open, close, new_bracket, input, depth: 0}
     }
 
-    /// Parses a bracket representing the bracket starting at `open`,
-    /// or [`None`] if [`self.input`] is exhausted first.
+    /// Returns the bracket starting at `open`.
     fn parse_bracket(&mut self, open_loc: Location) -> Token {
         let mut contents: Vec<Token> = Vec::new();
         loop {
@@ -65,7 +97,10 @@ impl<
     }
 }
 
-impl<I: Stream, F: Fn(Vec<Token>) -> Box<dyn Tree>> Stream for Parser<I, F> {
+impl<
+    F: Fn(Vec<Token>) -> Box<dyn Tree>,
+    I: Stream,
+> Stream for Brackets<F, I> {
     fn read(&mut self) -> Token {
         let token = self.input.read();
         if let Some(c) = token.downcast_copy::<char>() {
@@ -93,11 +128,11 @@ mod tests {
 
     #[test]
     fn some_brackets() {
-        let mut parser = Parser::new(
+        let mut parser = Brackets::new(
             '(',
             ')',
             |contents| Box::new(Round(contents)),
-            Parser::new(
+            Brackets::new(
                 '{',
                 '}',
                 |contents| Box::new(Brace(contents)),
@@ -126,7 +161,7 @@ mod tests {
 
         /// Wrap 'parser' in a [`Round`] parser.
         fn round(parser: impl Stream) -> impl Stream {
-            noop(Parser::new('(', ')', |contents| {
+            noop(Brackets::new('(', ')', |contents| {
                 let contents = noop(contents.into_iter()).read_all();
                 Box::new(Round(contents))
             }, parser))
@@ -134,7 +169,7 @@ mod tests {
 
         /// Wrap 'parser' in a [`Square`] parser.
         fn square(parser: impl Stream) -> impl Stream {
-            round(Parser::new('[', ']', |contents| {
+            round(Brackets::new('[', ']', |contents| {
                 let contents = round(contents.into_iter()).read_all();
                 Box::new(Square(contents))
             }, parser))
@@ -142,7 +177,7 @@ mod tests {
 
         /// Wrap 'parser' in a [`Brace`] parser.
         fn brace(parser: impl Stream) -> impl Stream {
-            square(Parser::new('{', '}', |contents| {
+            square(Brackets::new('{', '}', |contents| {
                 let contents = square(contents.into_iter()).read_all();
                 Box::new(Brace(contents))
             }, parser))

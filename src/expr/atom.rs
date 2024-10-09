@@ -1,8 +1,8 @@
 use super::{Tree, Op};
 
-/// Describes one of the built-in operators.
+/// Describes one of Welly's built-in operators. See also [`Op`].
 ///
-/// In general, operators have two meanings. For example `'-'` can mean
+/// In general, operators have two meanings. For example `-` can mean
 /// negation or subtraction. The cases are distinguished according to whether
 /// the operator is preceded by an expression.
 ///

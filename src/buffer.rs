@@ -1,7 +1,6 @@
 use std::rc::{Rc};
 
-use super::{lexer, word, bracket, expr, stmt};
-use super::{EndOfFile, Location, Token, Stream, Characters, Parse, word_parser};
+use super::{welly, parsers, EndOfFile, Location, Token, Stream, Characters, Parse};
 
 /// Pipes `source` (which should produce [`char`]s) through:
 /// - a lexer,
@@ -9,27 +8,10 @@ use super::{EndOfFile, Location, Token, Stream, Characters, Parse, word_parser};
 /// - two bracket matchers,
 /// - an [`Expr`] parser, and
 /// - (if the tightest brackets are not round) a [`Stmt`] parser.
-fn make_parser<'a>(source: impl 'a + Stream, word_parser: &'a word::Parser) -> impl 'a + Stream {
-    let stream = lexer::Parser.parse_stream(source);
+fn make_parser<'a>(source: impl 'a + Stream, word_parser: &'a parsers::Word) -> impl 'a + Stream {
+    let stream = parsers::LEXER.parse_stream(source);
     let stream = word_parser.parse_stream(stream);
-
-    /// Parse a [`Stream`] containing [`Brace`]s into [`Round`]s and [`Expr`]s.
-    fn round(input: impl Stream) -> impl Stream {
-        stmt::Parser.parse_stream(expr::Parser.parse_stream(bracket::Parser::new('(', ')', |contents| {
-            let contents = expr::Parser.parse_stream(contents.into_iter()).read_all();
-            Box::new(bracket::Round(contents))
-        }, input)))
-    }
-
-    /// Parse a [`Stream`] into [`Brace`]s, [`Round`]s and [`Expr`]s.
-    fn brace(input: impl Stream) -> impl Stream {
-        round(bracket::Parser::new('{', '}', |contents| {
-            let contents = round(contents.into_iter()).read_all();
-            Box::new(bracket::Brace(contents))
-        }, input))
-    }
-
-    brace(stream)
+    parsers::brace(stream)
 }
 
 /// Read [`Token`]s from `stream` until finding one that heuristically might be
@@ -43,8 +25,8 @@ fn skip(stream: &mut impl Stream) -> Option<Location> {
         if let Some(c) = token.downcast_copy::<char>() {
             if c == ';' { return Some(token.0); }
         }
-        if token.is::<bracket::Brace>() { return Some(token.0); }
-        if token.is::<stmt::Stmt>() {
+        if token.is::<welly::Brace>() { return Some(token.0); }
+        if token.is::<welly::Stmt>() {
             // Oops! We read too far. Oh well, discard it.
             return Some(token.0);
         }
@@ -65,8 +47,8 @@ fn skip(stream: &mut impl Stream) -> Option<Location> {
 /// ```
 #[derive(Debug)]
 pub struct Buffer {
-    /// A cache of `word_parser()`.
-    word_parser: word::Parser,
+    /// A cache of [`parsers::word()`].
+    word_parser: parsers::Word,
 
     /// Source code that has been received but not yet parsed.
     source: String,
@@ -77,7 +59,7 @@ pub struct Buffer {
 
 impl Default for Buffer {
     fn default() -> Self {
-        Self {word_parser: word_parser(), source: String::new(), is_complete: false}
+        Self {word_parser: parsers::word(), source: String::new(), is_complete: false}
     }
 }
 
@@ -104,7 +86,7 @@ impl Buffer {
     pub fn complete(&mut self) { self.is_complete = true; }
 
     /// Attempt to parse [`self.remainder()`]. Hopefully the returned [`Token`]
-    /// is a [`Stmt`]. Other possibilities include
+    /// is a [`Stmt`]. Other possibilities can be found in [`welly`].
     ///
     /// `Some((source, token))` indicates that there was enough source code to
     /// parse a `Token` (which might be an error message). [`Location`]s are
@@ -114,7 +96,7 @@ impl Buffer {
     /// we need to wait for more, or because there is no more. In this case
     /// `self` is not modified.
     ///
-    /// [`Stmt`]: stmt::Stmt
+    /// [`Stmt`]: welly::Stmt
     pub fn try_parse(&mut self) -> Option<(Rc<str>, Token)> {
         let (token, end) = {
             let source = Characters::new(self.remainder(), self.is_complete);
