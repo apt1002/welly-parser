@@ -7,9 +7,9 @@ It's a recursive descent parser, hand-written (i.e. not using a parser library).
 
 ## Status
 
-Unfinished. The API is incomplete and in flux. The syntax is in less flux, but could still change in the details.
+The API is incomplete and in flux. The syntax is in less flux, but could still change in the details.
 
-Missing features that I do plan to include in the first release include e.g. statements and some type literals. Missing features that I don't plan for the first release include floating point literals. These will be added later.
+Missing features that I do plan to include in the first release include some type literals. Missing features that I don't plan for the first release include floating point literals. These will be added later.
 
 
 ## Syntax choices
