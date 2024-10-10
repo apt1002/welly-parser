@@ -67,9 +67,9 @@ impl Buffer {
     /// Returns the suffix of the source code that has not yet been parsed.
     pub fn remainder(&self) -> &str { &self.source }
 
-    /// Append `source` to the source code.
+    /// Append `source` to the source code. Requires `!self.is_complete()`.
     pub fn push_str(&mut self, source: &str) {
-        assert!(!self.is_complete);
+        assert!(!self.is_complete());
         self.source.push_str(source);
     }
 
@@ -84,6 +84,9 @@ impl Buffer {
     /// assert!(buffer.try_parse().is_some());
     /// ```
     pub fn complete(&mut self) { self.is_complete = true; }
+
+    /// Returns `true` if more source code can be added with `self.push_str()`.
+    pub fn is_complete(&self) -> bool { self.is_complete }
 
     /// Attempt to parse [`self.remainder()`]. Hopefully the returned [`Token`]
     /// is a [`Stmt`]. Other possibilities can be found in [`welly`].

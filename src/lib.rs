@@ -1,6 +1,3 @@
-use std::{io};
-use io::{BufRead, Write};
-
 mod tree;
 pub use tree::{Tree, EndOfFile};
 
@@ -91,15 +88,6 @@ pub mod parsers {
 
     pub const EXPR: expr::Parser = expr::Parser;
     pub const STMT: stmt::Parser = stmt::Parser;
-}
-
-pub fn echo<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<()> {
-    let mut line = String::new();
-    loop {
-        if input.read_line(&mut line)? == 0 { return Ok(()); }
-        write!(output, "{}", &line)?;
-        line.clear();
-    }
 }
 
 // ----------------------------------------------------------------------------

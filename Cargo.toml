@@ -1,6 +1,6 @@
 [package]
 name = "welly-parser"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Alistair Turnbull <welly@minworks.co.uk>"]
 rust-version = "1.63" # The version in Debian Bookworm.
 description = "An artisinal parser for the Welly programming language"
