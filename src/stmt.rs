@@ -249,8 +249,9 @@ impl Parse for Parser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{welly, parsers, EndOfFile, Characters, Brackets};
+    use crate::{welly, parsers, EndOfFile, Characters};
     use welly::{Round, Brace};
+    use parsers::{Brackets};
 
     /// Parse a [`Stream`] containing [`Brace`]s into [`Round`]s and [`Expr`]s.
     fn round(input: impl Stream) -> impl Stream {
