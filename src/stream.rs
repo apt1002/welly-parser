@@ -56,14 +56,17 @@ impl From<Range<usize>> for Location {
 /// This is commonly used to represent bits of a parse tree, remembering where
 /// they came from in the source code.
 ///
-/// `self.0` or `*self` unwraps the `T`. `Loc::location(&self)`
-/// returns the `Location`. `hash()` and `eq()` ignore the `Location`.
+/// `Loc::unwrap(self)` or `*self` unwraps the `T`. `Loc::location(&self)`
+/// returns the `Location`.
 #[derive(Debug, Copy, Clone)]
-pub struct Loc<T>(pub T, Location);
+pub struct Loc<T>(T, Location);
 
 impl<T> Loc<T> {
     /// Annotate `value` with `location`.
     pub fn new(value: T, location: impl Into<Location>) -> Self { Loc(value, location.into()) }
+
+    /// Discards the [`Location`].
+    pub fn unwrap(self) -> T { self.0 }
 
     /// Returns the `Location` of self.
     ///
@@ -82,7 +85,7 @@ impl<T> std::ops::DerefMut for Loc<T> {
 }
 
 impl<U, T: PartialEq<U>> PartialEq<U> for Loc<T> {
-    fn eq(&self, other: &U) -> bool { self.0.eq(other) }
+    fn eq(&self, other: &U) -> bool { **self == *other }
 }
 
 // ----------------------------------------------------------------------------
@@ -119,16 +122,16 @@ impl Token {
     pub fn location(&self) -> Location { Loc::location(&self.0) }
 
     /// Throws away the `location`.
-    pub fn result(self) -> Result<Box<dyn Tree>, String> { self.0.0 }
+    pub fn result(self) -> Result<Box<dyn Tree>, String> { Loc::unwrap(self.0) }
 
     /// Tests whether `self` is a `T`.
     pub fn is<T: Tree>(&self) -> bool {
-        if let Ok(t) = &self.0.0 { t.is::<T>() } else { false }
+        if let Ok(t) = &*self.0 { t.is::<T>() } else { false }
     }
 
     /// Tests whether `self` marks the end of incomplete source code.
     pub fn is_incomplete(&self) -> bool {
-        if let Err(e) = &self.0.0 { e.len() == 0 } else { false }
+        if let Err(e) = &*self.0 { e.len() == 0 } else { false }
     }
 
     /// Discard the [`Location`], panic on `Err`, and panic if the payload is
@@ -149,7 +152,7 @@ impl Token {
 
 impl<T: Tree + PartialEq> std::cmp::PartialEq<T> for Token {
     fn eq(&self, other: &T) -> bool {
-        if let Ok(t) = &self.0.0 { **t == *other } else { false }
+        if let Ok(t) = &*self.0 { **t == *other } else { false }
     }
 }
 
