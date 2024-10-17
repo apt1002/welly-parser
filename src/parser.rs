@@ -30,6 +30,14 @@ impl<I: Stream> Context<I> {
         self.locs.pop().expect("No tokens have been read")
     }
 
+    /// Returns the [`Location`] of the most recent [`Token`].
+    pub fn last(&self) -> Location {
+        *self.locs.last().expect("No tokens have been read")
+    }
+
+    /// Annotate `t` with `last()`.
+    pub fn locate<T>(&self, value: T) -> Loc<T> { Loc::new(value, self.last()) }
+
     /// Returns an iterator over the [`Location`]s of all recent [`Token`]s and
     /// forgets them.
     pub fn drain(&mut self) -> impl Iterator<Item=Location> + '_ { self.locs.drain(..) }

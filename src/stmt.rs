@@ -1,6 +1,6 @@
 //! Welly's imperative statements.
 
-use super::{welly, Tree, Stream, Context, Parse};
+use super::{welly, Tree, Location, Loc, Stream, Context, Parse};
 use welly::{Brace, MaybeExpr, Expr, Op};
 
 pub const MISSING_SEMICOLON: &'static str = "Missing `;`";
@@ -78,10 +78,11 @@ impl Tree for AssignOp {
 ///
 /// We allow the pattern [`Expr`]s to be `None`, though it's an error.
 #[derive(Debug)]
-pub struct Case(pub MaybeExpr, pub Brace);
+pub struct Case(pub Location, pub MaybeExpr, pub Brace);
 
-/// Represents a possibly missing `else` clause.
-pub type MaybeElse = Option<Brace>;
+/// Represents an `else` clause.
+#[derive(Debug)]
+pub struct Else(pub Location, pub Brace);
 
 /// Represents a statement, including the trailing `;` if any.
 ///
@@ -94,34 +95,34 @@ pub enum Stmt {
     Expr(MaybeExpr),
 
     /// E.g. `x += 1;`.
-    Assign(MaybeExpr, AssignOp, MaybeExpr),
+    Assign(MaybeExpr, Loc<AssignOp>, MaybeExpr),
 
     /// E.g. `if ... {...} else {...}`.
     ///
     /// Allow the condition [`Expr`] to be `None`, though it's an error.
-    If(MaybeExpr, Brace, MaybeElse),
+    If(Location, MaybeExpr, Brace, Option<Else>),
 
     /// E.g. `while ... {...} else {...}`.
     ///
     /// Allow the condition [`Expr`] to be `None`, though it's an error.
-    While(MaybeExpr, Brace, MaybeElse),
+    While(Location, MaybeExpr, Brace, Option<Else>),
 
     /// E.g. `for ... in ... {...} else {...}`.
     ///
     /// Allow an arbitrary [`Expr`], or a missing one, though anything but
     /// `... in ...` is an error.
-    For(MaybeExpr, Brace, MaybeElse),
+    For(Location, MaybeExpr, Brace, Option<Else>),
 
     /// E.g. `switch ... case ... {...} case ... {...} else {...}`.
     ///
     /// Allow the discriminant [`Expr`] to be `None`, though it's an error.
-    Switch(MaybeExpr, Vec<Case>, MaybeElse),
+    Switch(Location, MaybeExpr, Vec<Case>, Option<Else>),
 
     /// E.g. `return ...;` or `continue;`.
     ///
     /// Allow the [`Expr`] to be present or missing, though for some [`Verb`]s
     /// one of those cases is an error.
-    Verb(Verb, MaybeExpr),
+    Verb(Loc<Verb>, MaybeExpr),
 }
 
 impl Tree for Stmt {}
@@ -148,10 +149,11 @@ impl Parser {
         &self,
         input: &mut Context<impl Stream>,
     ) -> Result<Option<Case>, String> {
+        let loc = input.last();
         Ok(if input.read_if(|k| matches!(k, Keyword::Case))?.is_some() {
             let pattern = input.read::<Expr>()?;
             let body = input.read::<Brace>()?.ok_or(MISSING_CASE_BODY);
-            Some(Case(pattern, *body?))
+            Some(Case(loc, pattern, *body?))
         } else { None })
     }
 
@@ -161,13 +163,16 @@ impl Parser {
     fn parse_else(
         &self,
         input: &mut Context<impl Stream>,
-    ) -> Result<MaybeElse, String> {
+    ) -> Result<Option<Else>, String> {
         Ok(if input.read_if(|k| matches!(k, Keyword::Else))?.is_some() {
-            Some(*input.read::<Brace>()?.ok_or(MISSING_ELSE_BODY)?)
+            let loc = input.last();
+            let brace = *input.read::<Brace>()?.ok_or(MISSING_ELSE_BODY)?;
+            Some(Else(loc, brace))
         } else { None })
     }
 
-    /// Parse `expr {...}` optionally followed by `else {...}`.
+    /// After a keyword, parse `expr {...}` optionally followed by
+    /// `else {...}`.
     ///
     /// If the `{...}` is missing it's an error.
     ///
@@ -176,13 +181,14 @@ impl Parser {
     fn parse_control(
         &self,
         input: &mut Context<impl Stream>,
-        constructor: fn(MaybeExpr, Brace, MaybeElse) -> Stmt,
+        constructor: fn(Location, MaybeExpr, Brace, Option<Else>) -> Stmt,
         missing_body: &'static str,
     ) -> Result<Box<dyn Tree>, String> {
+        let loc = input.last();
         let condition = input.read::<Expr>()?;
         let body = input.read::<Brace>()?.ok_or(missing_body);
         let else_ = self.parse_else(input)?;
-        Ok(Box::new(constructor(condition, *body?, else_)))
+        Ok(Box::new(constructor(loc, condition, *body?, else_)))
     }
 }
 
@@ -193,14 +199,16 @@ impl Parse for Parser {
     ) -> Result<Box<dyn Tree>, String> {
         if let Some(expr) = input.read::<Expr>()? {
             if let Some(op) = input.read::<AssignOp>()? {
+                let op = input.locate(*op);
                 let rhs = input.read::<Expr>()?;
                 self.parse_semicolon(input)?;
-                Ok(Box::new(Stmt::Assign(Some(expr), *op, rhs)))
+                Ok(Box::new(Stmt::Assign(Some(expr), op, rhs)))
             } else {
                 self.parse_semicolon(input)?;
                 Ok(Box::new(Stmt::Expr(Some(expr))))
             }
         } else if let Some(keyword) = input.read::<Keyword>()? {
+            let loc = input.last();
             match *keyword {
                 Keyword::Case => {
                     let _ = input.read::<Expr>()?;
@@ -216,7 +224,7 @@ impl Parse for Parser {
                     let mut cases = Vec::new();
                     while let Some(case) = self.parse_case(input)? { cases.push(case); }
                     let else_ = self.parse_else(input)?;
-                    Ok(Box::new(Stmt::Switch(discriminant, cases, else_)))
+                    Ok(Box::new(Stmt::Switch(loc, discriminant, cases, else_)))
                 },
                 Keyword::If => {
                     self.parse_control(input, Stmt::If, MISSING_IF_BODY)
@@ -228,6 +236,7 @@ impl Parse for Parser {
                     self.parse_control(input, Stmt::For, MISSING_LOOP_BODY)
                 },
                 Keyword::Verb(verb) => {
+                    let verb = input.locate(verb);
                     let expr = input.read::<Expr>()?;
                     self.parse_semicolon(input)?;
                     Ok(Box::new(Stmt::Verb(verb, expr)))
@@ -235,8 +244,9 @@ impl Parse for Parser {
             }
         } else if let Some(op) = input.read::<AssignOp>()? {
             // Parse `+= ...;` as an `Assign` with a missing LHS.
+            let op = input.locate(*op);
             let rhs = input.read::<Expr>()?;
-            Ok(Box::new(Stmt::Assign(None, *op, rhs)))
+            Ok(Box::new(Stmt::Assign(None, op, rhs)))
         } else if input.read_if::<char>(|&k| k == ';')?.is_some() {
             // Parse `;` as a missing `Expr`.
             Ok(Box::new(Stmt::Expr(None)))
@@ -297,7 +307,7 @@ mod tests {
     /// Check that `e` is of the form `Some(Expr::Name(expected))`.
     fn check_name(e: impl Into<MaybeExpr>, expected: &'static str) {
         match *e.into().expect("Missing Expr::Name") {
-            Expr::Name(observed) => assert_eq!(expected, observed),
+            Expr::Name(observed) => assert_eq!(observed, expected),
             e => panic!("Expected an Expr::Name but got {:?}", e),
         }
     }
@@ -310,6 +320,11 @@ mod tests {
             s => panic!("Expected a Stmt::Expr but got {:#?}", s),
         }
         assert_eq!(contents.read(), EndOfFile);
+    }
+
+    /// Check that `b` is of the form `{ expected; }`.
+    fn check_else(e: impl Into<Option<Else>>, expected: &'static str) {
+        check_brace(e.into().expect("Missing Else").1, expected);
     }
 
     #[test]
@@ -338,10 +353,10 @@ mod tests {
     fn if_() {
         let tree = parse_one("if b { foo; } else { bar; }");
         match *tree {
-            Stmt::If(b, then, else_) => {
+            Stmt::If(_, b, then, else_) => {
                 check_name(b, "b");
                 check_brace(then, "foo");
-                check_brace(else_, "bar");
+                check_else(else_, "bar");
             },
             s => panic!("Expected a Stmt::If but got {:#?}", s),
         }
@@ -351,18 +366,18 @@ mod tests {
     fn switch() {
         let tree = parse_one("switch d case FOO { foo; } else { bar; }");
         match *tree {
-            Stmt::Switch(d, cases, else_) => {
+            Stmt::Switch(_, d, cases, else_) => {
                 check_name(d, "d");
                 let mut cases = cases.into_iter();
                 match cases.next() {
-                    Some(Case(pattern, body)) => {
+                    Some(Case(_, pattern, body)) => {
                         check_name(pattern, "FOO");
                         check_brace(body, "foo");
                     },
                     _ => panic!("Missing Case"),
                 }
                 assert!(cases.next().is_none());
-                check_brace(else_, "bar");
+                check_else(else_, "bar");
             },
             s => panic!("Expected a Stmt::Switch but got {:#?}", s),
         }
@@ -372,7 +387,7 @@ mod tests {
     fn break_() {
         let tree = parse_one("break;");
         match *tree {
-            Stmt::Verb(Verb::Break, None) => {},
+            Stmt::Verb(verb, None) => assert_eq!(verb, Verb::Break),
             s => panic!("Expected a Stmt::Verb but got {:#?}", s),
         }
     }
@@ -381,7 +396,10 @@ mod tests {
     fn return_() {
         let tree = parse_one("return 42;");
         match *tree {
-            Stmt::Verb(Verb::Return, ans) => check_name(ans, "42"),
+            Stmt::Verb(verb, ans) => {
+                assert_eq!(verb, Verb::Return);
+                check_name(ans, "42");
+            },
             s => panic!("Expected a Stmt::Verb but got {:#?}", s),
         }
     }

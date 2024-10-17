@@ -1,6 +1,6 @@
 //! Welly's expressions.
 
-use super::{welly, Tree, Stream, Context, Parse};
+use super::{welly, Tree, Location, Loc, Stream, Context, Parse};
 use welly::{Comment, CharacterLiteral, StringLiteral, Whitespace, Alphanumeric, Round, Brace};
 
 mod op;
@@ -51,28 +51,28 @@ pub type MaybeExpr = Option<Box<Expr>>;
 #[derive(Debug)]
 pub enum Expr {
     /// A literal character value.
-    Char(char),
+    Char(Loc<char>),
 
     /// A literal string value.
-    String(String),
+    String(Loc<String>),
 
     /// An identifier or literal number value.
-    Name(String),
+    Name(Loc<String>),
 
     /// Comma-separated [`Expr`]s in round brackets.
     Round(Round),
 
     /// A function or function type literal.
-    Function(Option<String>, Round, MaybeExpr, Option<Brace>),
+    Function(Option<Loc<String>>, Loc<Round>, MaybeExpr, Option<Brace>),
 
     /// A keyword operator applied to zero, one or two operands.
-    Op(MaybeExpr, Op, MaybeExpr),
+    Op(MaybeExpr, Loc<Op>, MaybeExpr),
 
     /// Field access.
-    Field(MaybeExpr, String),
+    Field(MaybeExpr, Loc<String>),
 
     /// Function or macro call.
-    Call(MaybeExpr, Round),
+    Call(MaybeExpr, Loc<Round>),
 }
 
 impl Tree for Expr {}
@@ -111,14 +111,16 @@ impl Parser {
         input: &mut Context<impl Stream>,
     ) -> Result<Expr, String> {
         skip(input)?;
-        let name = input.read::<Alphanumeric>()?.map(|name| name.0);
-        let args = *input.read::<Round>()?.ok_or_else(|| MISSING_ARGS)?;
+        let name = input.read::<Alphanumeric>()?;
+        let name = name.map(|name| input.locate(name.0));
+        let args = input.read::<Round>()?.ok_or_else(|| MISSING_ARGS)?;
+        let args = input.locate(*args);
         skip(input)?;
         let return_type = if let Some(c) = input.read::<char>()? {
             if *c == ':' {
                 skip(input)?;
                 if let Some(type_name) = input.read::<Alphanumeric>()? {
-                    Some(Box::new(Expr::Name(type_name.0)))
+                    Some(Box::new(Expr::Name(input.locate(type_name.0))))
                 } else if let Some(round) = input.read::<Round>()? {
                     Some(Box::new(Expr::Round(*round)))
                 } else {
@@ -146,29 +148,34 @@ impl Parse for Parser {
         loop {
             skip(input)?;
             if let Some(tree) = input.read::<Alphanumeric>()? {
-                stack.nonfix(Expr::Name(tree.0));
+                stack.nonfix(Expr::Name(input.locate(tree.0)), input.last());
             } else if let Some(tree) = input.read::<Round>()? {
                 if stack.has_expr() {
-                    stack.postfix(Precedence::MAX, |expr| Expr::Call(expr, *tree));
+                    let tree = input.locate(*tree);
+                    stack.postfix(Precedence::MAX, |expr| Expr::Call(expr, tree));
                 } else {
-                    stack.nonfix(Expr::Round(*tree));
+                    stack.nonfix(Expr::Round(*tree), input.last());
                 }
             } else if let Some(tree) = input.read::<Operator>()? {
-                stack.op(if stack.has_expr() { tree.with_left } else { tree.without_left });
+                stack.op(input.locate(
+                    if stack.has_expr() { tree.with_left } else { tree.without_left }
+                ));
             } else if let Some(keyword) = input.read::<Keyword>()? {
                 match *keyword {
                     Keyword::Fn => {
-                        stack.nonfix(self.parse_function(input)?);
+                        let loc = input.last();
+                        stack.nonfix(self.parse_function(input)?, loc);
                     },
                     Keyword::Dot => {
                         let field = self.parse_field(input)?;
-                        stack.postfix(Precedence::MAX, |expr| Expr::Field(expr, field.0));
+                        let field = input.locate(field.0);
+                        stack.postfix(Precedence::MAX, |expr| Expr::Field(expr, field));
                     },
                 }
             } else if let Some(tree) = input.read::<CharacterLiteral>()? {
-                stack.nonfix(Expr::Char(tree.0));
+                stack.nonfix(Expr::Char(input.locate(tree.0)), input.last());
             } else if let Some(tree) = input.read::<StringLiteral>()? {
-                stack.nonfix(Expr::String(tree.0));
+                stack.nonfix(Expr::String(input.locate(tree.0)), input.last());
             } else {
                 break;
             }
@@ -237,7 +244,7 @@ mod tests {
     fn check_op(e: impl Into<MaybeExpr>, expected: Op) -> (MaybeExpr, MaybeExpr) {
         match *e.into().expect("Missing Expr::Op") {
             Expr::Op(left, observed, right) => {
-                assert_eq!(expected, observed);
+                assert_eq!(observed, expected);
                 (left, right)
             },
             e => panic!("Expected an Expr::Op but got {:?}", e),
@@ -247,7 +254,7 @@ mod tests {
     /// Check that `e` is of the form `Some(Expr::Name(expected))`.
     fn check_name(e: impl Into<MaybeExpr>, expected: &'static str) {
         match *e.into().expect("Missing Expr::Name") {
-            Expr::Name(observed) => assert_eq!(expected, observed),
+            Expr::Name(observed) => assert_eq!(observed, expected),
             e => panic!("Expected an Expr::Name but got {:?}", e),
         }
     }
@@ -257,7 +264,7 @@ mod tests {
     fn check_field(e: impl Into<MaybeExpr>, expected: &'static str) -> MaybeExpr {
         match *e.into().expect("Missing Expr::Field") {
             Expr::Field(object, observed) => {
-                assert_eq!(expected, observed);
+                assert_eq!(observed, expected);
                 object
             },
             e => panic!("Expected an Expr::Name but got {:?}", e),

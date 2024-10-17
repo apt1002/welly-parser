@@ -1,4 +1,4 @@
-use super::{Precedence, Op, MaybeExpr, Expr};
+use super::{Location, Loc, Precedence, Op, MaybeExpr, Expr};
 
 /// Represents an [`Op`] that is missing its right operand.
 #[derive(Debug)]
@@ -7,7 +7,7 @@ pub struct Waiting {
     expr: MaybeExpr,
 
     /// The `Op`.
-    op: Op,
+    op: Loc<Op>,
 
     /// The right precedence of `Op`.
     right: Precedence,
@@ -37,11 +37,16 @@ impl Stack {
 
     /// Before beginning a new [`Expr`], ensure that `self.expr` is `None` by
     /// inserting an [`Op::Missing`] if necessary.
-    fn insert_missing(&mut self) {
+    ///
+    /// - loc - the [`Location`] before which to report a missing operator, if
+    ///   necessary.
+    fn insert_missing(&mut self, loc: Location) {
         let expr = self.expr.take();
         if expr.is_some() {
             // We have a left operand we weren't expecting.
-            self.ops.push(Waiting {expr, op: Op::Missing, right: Precedence::MIN});
+            let op = Loc::new(Op::Missing, loc);
+            let right = Precedence::MIN;
+            self.ops.push(Waiting {expr, op, right});
         }
     }
 
@@ -69,12 +74,12 @@ impl Stack {
     /// Append an [`Op`].
     ///
     /// `Op`s can be nonfix, prefix, postfix or infix.
-    pub fn op(&mut self, op: Op) {
+    pub fn op(&mut self, op: Loc<Op>) {
         let (left, right) = op.precedence();
         if let Some(left) = left {
             self.partial_flush(left);
         } else {
-            self.insert_missing();
+            self.insert_missing(Loc::location(&op));
         }
         if let Some(right) = right {
             let expr = self.expr.take();
@@ -86,8 +91,11 @@ impl Stack {
     }
 
     /// Append a non-[`Op`] that has no operands.
-    pub fn nonfix(&mut self, nonfix: Expr) {
-        self.insert_missing();
+    ///
+    /// - loc - the [`Location`] before which to report a missing operator, if
+    ///   necessary.
+    pub fn nonfix(&mut self, nonfix: Expr, loc: Location) {
+        self.insert_missing(loc);
         self.expr = Some(Box::new(nonfix));
     }
 
