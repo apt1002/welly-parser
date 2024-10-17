@@ -283,7 +283,7 @@ mod tests {
     /// Parse `source` into a single [`Stmt`].
     fn parse_one(source: &'static str) -> Box<Stmt> {
         let mut stream = parse(source);
-        let result = match stream.read().1 {
+        let result = match stream.read().result() {
             Ok(tree) => match tree.downcast::<Stmt>() {
                 Ok(tree) => tree,
                 Err(tree) => panic!("Got a non-Stmt: {:?}", tree),

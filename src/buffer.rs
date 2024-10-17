@@ -22,13 +22,11 @@ fn skip(stream: &mut impl Stream) -> Option<Location> {
     loop {
         let token = stream.read();
         if token.is_incomplete() || token.is::<EndOfFile>() { return None; }
-        if let Some(c) = token.downcast_copy::<char>() {
-            if c == ';' { return Some(token.0); }
-        }
-        if token.is::<welly::Brace>() { return Some(token.0); }
+        if token == ';' { return Some(token.location()); }
+        if token.is::<welly::Brace>() { return Some(token.location()); }
         if token.is::<welly::Stmt>() {
             // Oops! We read too far. Oh well, discard it.
-            return Some(token.0);
+            return Some(token.location());
         }
     }
 }
@@ -107,8 +105,8 @@ impl Buffer {
             let token = stream.read();
             if token.is_incomplete() || token.is::<EndOfFile>() { return None; }
             // Split off some source code including at least `token.0`.
-            let mut end = token.0.end;
-            if token.1.is_err() { if let Some(loc) = skip(&mut stream) { end = loc.end; } }
+            let mut end = token.location().end;
+            if token.0.is_err() { if let Some(loc) = skip(&mut stream) { end = loc.end; } }
             (token, end)
         };
         let s: String = self.source.drain(..end).collect();
@@ -132,7 +130,8 @@ mod tests {
         buffer.push_str(source);
         if is_complete { buffer.complete(); }
         let mut tokens: Vec<String> = Vec::new();
-        while let Some((s, Token(loc, _))) = buffer.try_parse() {
+        while let Some((s, token)) = buffer.try_parse() {
+            let loc = token.location();
             let span = String::from(&s[loc.start..loc.end]);
             tokens.push(span);
         }

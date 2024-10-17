@@ -221,7 +221,7 @@ mod tests {
     /// Parse `source` into a single [`Expr`].
     fn parse_one(source: &'static str) -> Box<Expr> {
         let mut stream = parse(source);
-        let result = match stream.read().1 {
+        let result = match stream.read().result() {
             Ok(tree) => match tree.downcast::<Expr>() {
                 Ok(tree) => tree,
                 Err(tree) => panic!("Got a non-Expr: {:?}", tree),

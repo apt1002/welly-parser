@@ -1,4 +1,4 @@
-use super::{Tree, Location, Token, Stream};
+use super::{Tree, Location, Loc, Token, Stream};
 
 /// A high-level wrapper around an input [`Stream`].
 ///
@@ -37,7 +37,7 @@ impl<I: Stream> Context<I> {
     /// Returns `self.stack.pop()` if possible, otherwise `self.input.read()`.
     fn read_inner(&mut self) -> Token {
         if let Some((loc, t)) = self.stack.pop() {
-            Token(loc, Ok(t))
+            Token::new(t, loc)
         } else {
             self.input.read()
         }
@@ -48,9 +48,9 @@ impl<I: Stream> Context<I> {
     /// - Ok(tree) - The parse [`Tree`] of the next `Token`.
     /// - Err(msg) - An error prevented parsing of the next `Token`.
     pub fn read_any(&mut self) -> Result<Box<dyn Tree>, String> {
-        let Token(loc, t) = self.read_inner();
-        self.locs.push(loc);
-        t
+        let token = self.read_inner();
+        self.locs.push(token.location());
+        token.result()
     }
 
     /// Read the next [`Token`] and internally record its [`Location`], but
@@ -145,6 +145,6 @@ impl<P: Parse, I: Stream> Stream for ParseStream<P, I> {
         } else {
             locs.last().expect("No tokens have been read")
         };
-        Token(loc, ret)
+        Token(Loc::new(ret, loc))
     }
 }

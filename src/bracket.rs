@@ -86,11 +86,11 @@ impl<
         loop {
             let token = self.read();
             if token.is_incomplete() { return token; }
-            if token == EndOfFile { return Token(open_loc, Err(MISSING_CLOSE.into())); }
+            if token == EndOfFile { return Token::new_err(MISSING_CLOSE, open_loc); }
             if token == self.close {
-                let loc = Location::union([open_loc, token.0]);
+                let close_loc = token.location();
                 let bracket = (&self.new_bracket)(contents);
-                return Token(loc, Ok(bracket));
+                return Token::new(bracket, Location::union([open_loc, close_loc]));
             }
             contents.push(token);
         }
@@ -103,17 +103,15 @@ impl<
 > Stream for Brackets<F, I> {
     fn read(&mut self) -> Token {
         let token = self.input.read();
-        if let Some(c) = token.downcast_copy::<char>() {
-            if c == self.open {
-                self.depth += 1;
-                return self.parse_bracket(token.0);
+        if token == self.open {
+            self.depth += 1;
+            return self.parse_bracket(token.location());
+        }
+        if token == self.close {
+            if self.depth == 0 {
+                return Token::new_err(MISSING_OPEN, token.location());
             }
-            if c == self.close {
-                if self.depth == 0 {
-                    return Token(token.0, Err(MISSING_OPEN.into()));
-                }
-                self.depth -= 1;
-            }
+            self.depth -= 1;
         }
         token
     }
