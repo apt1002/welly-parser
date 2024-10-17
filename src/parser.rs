@@ -138,16 +138,13 @@ pub struct ParseStream<P: Parse, I: Stream> {
 
 impl<P: Parse, I: Stream> Stream for ParseStream<P, I> {
     fn read(&mut self) -> Token {
-        match self.parse.parse(&mut self.input) {
-            Ok(token) => {
-                let loc = Location::union(self.input.drain());
-                Token(loc, Ok(token))
-            },
-            Err(e) => {
-                let loc = self.input.pop();
-                let _ = self.input.drain();
-                Token(loc, Err(e.into()))
-            },
-        }
+        let ret = self.parse.parse(&mut self.input);
+        let locs = self.input.drain();
+        let loc = if ret.is_ok() {
+            Location::union(locs)
+        } else {
+            locs.last().expect("No tokens have been read")
+        };
+        Token(loc, ret)
     }
 }

@@ -72,6 +72,12 @@ impl dyn Tree {
     }
 }
 
+impl<T: Tree + PartialEq> PartialEq<T> for dyn Tree {
+    fn eq(&self, other: &T) -> bool {
+        if let Some(tree) = self.downcast_ref::<T>() { tree == other } else { false }
+    }
+}
+
 impl Tree for () {}
 impl Tree for char {}
 

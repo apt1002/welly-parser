@@ -76,7 +76,7 @@ impl Token {
 
     /// Tests whether `self` is a `T`.
     pub fn is<T: Tree>(&self) -> bool {
-        if let Token(_, Ok(t)) = self { t.downcast_ref::<T>().is_some() } else { false }
+        if let Token(_, Ok(t)) = self { t.is::<T>() } else { false }
     }
 
     /// Tests whether `self` marks the end of incomplete source code.
@@ -102,7 +102,7 @@ impl Token {
 
 impl<T: Tree + PartialEq> std::cmp::PartialEq<T> for Token {
     fn eq(&self, other: &T) -> bool {
-        if let Token(_, Ok(t)) = self { t.downcast_ref::<T>() == Some(other) } else { false }
+        if let Token(_, Ok(t)) = self { **t == *other } else { false }
     }
 }
 
@@ -131,9 +131,7 @@ pub trait Stream {
 
 impl<I: Iterator<Item=Token>> Stream for I {
     fn read(&mut self) -> Token {
-        self.next().unwrap_or_else(
-            || Token(Location::EVERYWHERE, Ok(Box::new(EndOfFile)))
-        )
+        self.next().unwrap_or_else(|| Token::end_of_file())
     }
 }
 

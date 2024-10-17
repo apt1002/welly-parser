@@ -107,10 +107,8 @@ impl Buffer {
             let token = stream.read();
             if token.is_incomplete() || token.is::<EndOfFile>() { return None; }
             // Split off some source code including at least `token.0`.
-            let end = match &token.1 {
-                Ok(_) => token.0.end,
-                Err(_) => if let Some(loc) = skip(&mut stream) { loc.end } else { token.0.end },
-            };
+            let mut end = token.0.end;
+            if token.1.is_err() { if let Some(loc) = skip(&mut stream) { end = loc.end; } }
             (token, end)
         };
         let s: String = self.source.drain(..end).collect();
