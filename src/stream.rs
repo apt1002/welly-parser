@@ -18,17 +18,6 @@ pub struct Location {
 impl Location {
     /// A dummy value that can be used for things like [`EndOfFile`].
     pub const EVERYWHERE: Location = Location {start: usize::MIN, end: usize::MAX};
-
-    /// Returns the smallest `Location` containing all `pieces`.
-    pub fn union(pieces: impl IntoIterator<Item=Self>) -> Self {
-        let mut pieces = pieces.into_iter();
-        let mut ret = pieces.next().expect("Cannot form the union of no pieces");
-        while let Some(piece) = pieces.next() {
-            ret.start = std::cmp::min(ret.start, piece.start);
-            ret.end = std::cmp::max(ret.end, piece.end);
-        }
-        ret
-    }
 }
 
 impl fmt::Debug for Location {

@@ -30,7 +30,12 @@ impl<I: Stream> Context<I> {
         self.locs.pop().expect("No tokens have been read")
     }
 
-    /// Returns the [`Location`] of the most recent [`Token`].
+    /// Returns the [`Location`] of the first [`Token`] returned by `read()`.
+    pub fn first(&self) -> Location {
+        *self.locs.first().expect("No tokens have been read")
+    }
+
+    /// Returns the [`Location`] of the last [`Token`] returned by `read()`.
     pub fn last(&self) -> Location {
         *self.locs.last().expect("No tokens have been read")
     }
@@ -38,9 +43,13 @@ impl<I: Stream> Context<I> {
     /// Annotate `t` with `last()`.
     pub fn locate<T>(&self, value: T) -> Loc<T> { Loc(value, self.last()) }
 
-    /// Returns an iterator over the [`Location`]s of all recent [`Token`]s and
+    /// Returns a [`Location`] containing all [`Token`]s `read()` so far, and
     /// forgets them.
-    pub fn drain(&mut self) -> impl Iterator<Item=Location> + '_ { self.locs.drain(..) }
+    pub fn drain(&mut self) -> Location {
+        let ret = Location {start: self.first().start, end: self.last().end};
+        self.locs.clear();
+        ret
+    }
 
     /// Returns `self.stack.pop()` if possible, otherwise `self.input.read()`.
     fn read_inner(&mut self) -> Token {
@@ -147,12 +156,9 @@ pub struct ParseStream<P: Parse, I: Stream> {
 impl<P: Parse, I: Stream> Stream for ParseStream<P, I> {
     fn read(&mut self) -> Token {
         let ret = self.parse.parse(&mut self.input);
-        let locs = self.input.drain();
-        let loc = if ret.is_ok() {
-            Location::union(locs)
-        } else {
-            locs.last().expect("No tokens have been read")
-        };
+        let last = self.input.last();
+        let all = self.input.drain();
+        let loc = if ret.is_ok() { all } else { last };
         Token(Loc(ret, loc))
     }
 }

@@ -90,7 +90,7 @@ impl<
             if token == self.close {
                 let close_loc = token.location();
                 let bracket = (&self.new_bracket)(contents);
-                return Token::new(bracket, Location::union([open_loc, close_loc]));
+                return Token::new(bracket, Location {start: open_loc.start, end: close_loc.end});
             }
             contents.push(token);
         }
