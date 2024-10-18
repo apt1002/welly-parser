@@ -13,7 +13,7 @@ pub struct Context<I: Stream> {
     /// in reverse order.
     ///
     /// [`input`]: Self::input
-    stack: Vec<(Location, Box<dyn Tree>)>,
+    stack: Vec<Loc<Box<dyn Tree>>>,
 
     /// The [`Location`]s of [`Token`]s that have been read but not yet used to
     /// form an output.
@@ -36,7 +36,7 @@ impl<I: Stream> Context<I> {
     }
 
     /// Annotate `t` with `last()`.
-    pub fn locate<T>(&self, value: T) -> Loc<T> { Loc::new(value, self.last()) }
+    pub fn locate<T>(&self, value: T) -> Loc<T> { Loc(value, self.last()) }
 
     /// Returns an iterator over the [`Location`]s of all recent [`Token`]s and
     /// forgets them.
@@ -44,7 +44,7 @@ impl<I: Stream> Context<I> {
 
     /// Returns `self.stack.pop()` if possible, otherwise `self.input.read()`.
     fn read_inner(&mut self) -> Token {
-        if let Some((loc, t)) = self.stack.pop() {
+        if let Some(Loc(t, loc)) = self.stack.pop() {
             Token::new(t, loc)
         } else {
             self.input.read()
@@ -95,7 +95,7 @@ impl<I: Stream> Context<I> {
     /// be returned by the next call to `read()`.
     pub fn unread(&mut self, tree: Box<dyn Tree>) {
         let loc = self.pop();
-        self.stack.push((loc, tree));
+        self.stack.push(Loc(tree, loc));
     }
 }
 
@@ -153,6 +153,6 @@ impl<P: Parse, I: Stream> Stream for ParseStream<P, I> {
         } else {
             locs.last().expect("No tokens have been read")
         };
-        Token(Loc::new(ret, loc))
+        Token(Loc(ret, loc))
     }
 }

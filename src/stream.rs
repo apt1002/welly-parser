@@ -37,14 +37,6 @@ impl fmt::Debug for Location {
     }
 }
 
-impl From<usize> for Location {
-    fn from(value: usize) -> Self { Self {start: value, end: value + 1} }
-}
-
-impl From<(usize, usize)> for Location {
-    fn from(value: (usize, usize)) -> Self { Self {start: value.0, end: value.1} }
-}
-
 impl From<Range<usize>> for Location {
     fn from(value: Range<usize>) -> Self { Self {start: value.start, end: value.end} }
 }
@@ -55,47 +47,26 @@ impl From<Range<usize>> for Location {
 ///
 /// This is commonly used to represent bits of a parse tree, remembering where
 /// they came from in the source code.
-///
-/// `Loc::unwrap(self)` or `*self` unwraps the `T`. `Loc::location(&self)`
-/// returns the `Location`.
 #[derive(Debug, Copy, Clone)]
-pub struct Loc<T>(T, Location);
+pub struct Loc<T>(pub T, pub Location);
 
 impl<T> Loc<T> {
-    /// Annotate `value` with `location`.
-    pub fn new(value: T, location: impl Into<Location>) -> Self { Loc(value, location.into()) }
-
-    /// Discards the [`Location`].
-    pub fn unwrap(self) -> T { self.0 }
-
-    /// Returns the `Location` of self.
-    ///
-    /// If you call this as `Loc::location(&self)` then there is no risk of
-    /// confusing with `(*self).location`
-    pub fn location(&self) -> Location { self.1 }
-}
-
-impl<T> std::ops::Deref for Loc<T> {
-    type Target = T;
-    fn deref(&self) -> &Self::Target { &self.0 }
-}
-
-impl<T> std::ops::DerefMut for Loc<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
+    /// Convert an `&Loc<T>` to a `Loc<&T>`.
+    pub fn as_ref(&self) -> Loc<&T> { Loc(&self.0, self.1) }
 }
 
 impl<U, T: PartialEq<U>> PartialEq<U> for Loc<T> {
-    fn eq(&self, other: &U) -> bool { **self == *other }
+    fn eq(&self, other: &U) -> bool { self.0 == *other }
 }
 
 // ----------------------------------------------------------------------------
 
 /// Represents a parse [`Tree`] or a parse error, with a [`Location`].
 ///
-/// - Token(Loc::new(Ok(t), location)) represents a parse-tree `t`.
+/// - Token(Loc(Ok(t), location)) represents a parse-tree `t`.
 ///   `t` can be [`EndOfFile`] to represent the end of the source code.
 ///   In this case, the `Location` is spurious.
-/// - Token(Loc::new(Err(e), location)) represents an error message `e`.
+/// - Token(Loc(Err(e), location)) represents an error message `e`.
 ///   `e` can be the empty string to mark the end of incomplete source code.
 ///   In this case, the `Location` is spurious.
 #[derive(Debug)]
@@ -104,12 +75,12 @@ pub struct Token(pub Loc<Result<Box<dyn Tree>, String>>);
 impl Token {
     /// Constructs a `Self` from a `Tree` and its `Location`.
     pub fn new(tree: Box<dyn Tree>, location: impl Into<Location>) -> Self {
-        Token(Loc::new(Ok(tree), location))
+        Token(Loc(Ok(tree), location.into()))
     }
 
     /// Constructs a `Self` from an error message and its `Location`.
     pub fn new_err(message: impl Into<String>, location: impl Into<Location>) -> Self {
-        Token(Loc::new(Err(message.into()), location))
+        Token(Loc(Err(message.into()), location.into()))
     }
 
     /// Returns an `EndOfFile`, to indicate the end of the source code.
@@ -119,19 +90,22 @@ impl Token {
     pub fn incomplete() -> Self { Self::new_err("", Location::EVERYWHERE) }
 
     /// Returns the [`Location`] of `self`.
-    pub fn location(&self) -> Location { Loc::location(&self.0) }
+    pub fn location(&self) -> Location { self.0.1 }
 
     /// Throws away the `location`.
-    pub fn result(self) -> Result<Box<dyn Tree>, String> { Loc::unwrap(self.0) }
+    pub fn result(self) -> Result<Box<dyn Tree>, String> { self.0.0 }
+
+    /// Throws away the `location`.
+    pub fn result_ref(&self) -> &Result<Box<dyn Tree>, String> { &self.0.0 }
 
     /// Tests whether `self` is a `T`.
     pub fn is<T: Tree>(&self) -> bool {
-        if let Ok(t) = &*self.0 { t.is::<T>() } else { false }
+        if let Ok(t) = self.result_ref() { t.is::<T>() } else { false }
     }
 
     /// Tests whether `self` marks the end of incomplete source code.
     pub fn is_incomplete(&self) -> bool {
-        if let Err(e) = &*self.0 { e.len() == 0 } else { false }
+        if let Err(e) = self.result_ref() { e.len() == 0 } else { false }
     }
 
     /// Discard the [`Location`], panic on `Err`, and panic if the payload is
@@ -152,7 +126,7 @@ impl Token {
 
 impl<T: Tree + PartialEq> std::cmp::PartialEq<T> for Token {
     fn eq(&self, other: &T) -> bool {
-        if let Ok(t) = &*self.0 { **t == *other } else { false }
+        if let Ok(t) = self.result_ref() { **t == *other } else { false }
     }
 }
 

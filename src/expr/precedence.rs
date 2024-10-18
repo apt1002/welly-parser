@@ -44,7 +44,7 @@ impl Stack {
         let expr = self.expr.take();
         if expr.is_some() {
             // We have a left operand we weren't expecting.
-            let op = Loc::new(Op::Missing, loc);
+            let op = Loc(Op::Missing, loc);
             let right = Precedence::MIN;
             self.ops.push(Waiting {expr, op, right});
         }
@@ -75,11 +75,11 @@ impl Stack {
     ///
     /// `Op`s can be nonfix, prefix, postfix or infix.
     pub fn op(&mut self, op: Loc<Op>) {
-        let (left, right) = op.precedence();
+        let (left, right) = op.0.precedence();
         if let Some(left) = left {
             self.partial_flush(left);
         } else {
-            self.insert_missing(Loc::location(&op));
+            self.insert_missing(op.1);
         }
         if let Some(right) = right {
             let expr = self.expr.take();
