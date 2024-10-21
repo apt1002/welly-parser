@@ -16,7 +16,13 @@ impl<T: Any> AsAny for T {
 
 // ----------------------------------------------------------------------------
 
-/// A type that represents a parse tree.
+/// A type that represents a generous parse tree.
+///
+/// The first parser pass is "generous" in the sense that it accepts a
+/// significant superset of the Welly language. If you parse a valid program,
+/// the generous parse tree will have the correct structure. If you parse a
+/// nearly valid program, you will hopefully nonetheless get a parse tree that
+/// is close to the one intended. This helps with reporting helpful errors.
 ///
 /// There are many types that implement `Tree`. It would be inconvenient to
 /// define an `enum` that can contain any of them. Instead, we use `dyn Tree`.

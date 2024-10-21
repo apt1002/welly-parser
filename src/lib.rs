@@ -35,8 +35,16 @@ pub mod welly {
     pub type Expr = expr::Expr;
     pub type MaybeExpr = expr::MaybeExpr;
     pub type AssignOp = stmt::AssignOp;
+    pub type Verb = stmt::Verb;
+    pub type Case = stmt::Case;
+    pub type Else = stmt::Else;
     pub type Stmt = stmt::Stmt;
 }
+
+mod valid;
+pub use valid::{Invalid, AST};
+
+pub mod ast;
 
 /// Re-exports all the Welly [`Parse`] implementations and [`Brackets`].
 pub mod parsers {
@@ -76,7 +84,7 @@ pub mod parsers {
     /// Returns a [`Brackets`] that recognises [`Brace`]s and parses their
     /// contents into [`Stmt`]s.
     ///
-    /// Parse a [`Stream`] containing words, lexemes and [`char`]s.
+    /// It parses a [`Stream`] containing words, lexemes and [`char`]s.
     ///
     /// [`Stmt`]: stmt::Stmt
     pub fn brace(input: impl Stream) -> impl Stream {
