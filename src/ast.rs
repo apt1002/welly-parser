@@ -1,5 +1,7 @@
-use super::{welly, Tree, Location, Loc, Token, Invalid, AST};
-use welly::{Op, AssignOp, Verb};
+use super::{bracket, expr, stmt, Tree, Location, Loc, Token, Invalid, AST};
+use bracket::{Round, Brace};
+use expr::{Op};
+use stmt::{AssignOp, Verb};
 
 /// Reports an error if `tree` is `None`.
 fn compulsory<T>(
@@ -36,7 +38,7 @@ impl<A> Tuple<A> {
 impl<A: AST> AST for Tuple<A> where
     <A as AST>::Generous: Tree,
 {
-    type Generous = welly::Round;
+    type Generous = Round;
 
     fn validate(report: &mut impl FnMut(Location, &str), round: &Self::Generous)
     -> Result<Self, Invalid> {
@@ -181,8 +183,8 @@ impl Tag {
     }
 
     /// Returns `value` as `Self` if possible.
-    fn maybe_validate_expr(tree: &welly::Expr) -> Option<Self> {
-        if let welly::Expr::Name(s) = tree { Self::maybe_validate(s) } else { None }
+    fn maybe_validate_expr(tree: &expr::Expr) -> Option<Self> {
+        if let expr::Expr::Name(s) = tree { Self::maybe_validate(s) } else { None }
     }
 }
 
@@ -199,14 +201,14 @@ pub enum LExpr {
 }
 
 impl AST for LExpr {
-    type Generous = welly::Expr;
+    type Generous = expr::Expr;
 
     fn validate(report: &mut impl FnMut(Location, &str), tree: &Self::Generous)
     -> Result<Self, Invalid> {
         Ok(match tree {
-            welly::Expr::Char(c) => Self::Literal(Literal::Char(*c)),
-            welly::Expr::String(s) => Self::Literal(Literal::Str(s.clone())),
-            welly::Expr::Name(s) => {
+            expr::Expr::Char(c) => Self::Literal(Literal::Char(*c)),
+            expr::Expr::String(s) => Self::Literal(Literal::Str(s.clone())),
+            expr::Expr::Name(s) => {
                 let c = s.0.chars().next().expect("Should be non-empty");
                 if matches!(c, '0'..='9') {
                     Self::Literal(Literal::Int(Loc::<u64>::validate(report, s)?))
@@ -214,16 +216,16 @@ impl AST for LExpr {
                     Self::Name(Name::validate(report, s)?)
                 }
             },
-            welly::Expr::Round(round) => {
+            expr::Expr::Round(round) => {
                 let loc = Location::EVERYWHERE; // TODO.
                 Tuple::validate(report, round)?.bracket_or_tuple(
                     |asts| Self::Tuple(Loc(asts, loc))
                 )
             },
-            welly::Expr::Function(_name, params, _return_type, _body) => {
+            expr::Expr::Function(_name, params, _return_type, _body) => {
                 Err(report(params.1, "Expression is not assignable"))?
             },
-            welly::Expr::Op(left, op, right) => {
+            expr::Expr::Op(left, op, right) => {
                 match op {
                     Loc(Op::Cast, loc) => {
                         let left = compulsory(left, || report(*loc, "Missing left operand"))?;
@@ -236,13 +238,13 @@ impl AST for LExpr {
                     _ => Err(report(op.1, "This operator does not make an assignable expression"))?,
                 }
             },
-            welly::Expr::Field(object, field) => {
+            expr::Expr::Field(object, field) => {
                 let object = compulsory(object, || report(field.1, "Missing expression before `.field`"))?;
                 let object = Box::<Self>::validate(report, &*object);
                 let field = Name::validate(report, field);
                 Self::Field(object?, field?)
             },
-            welly::Expr::Call(tag, Loc(args, loc)) => {
+            expr::Expr::Call(tag, Loc(args, loc)) => {
                 let tag = tag.as_ref().expect("Should have parsed as a tuple");
                 let args = Tuple::validate(report, args);
                 if let Some(tag) = Tag::maybe_validate_expr(tag) {
@@ -270,14 +272,14 @@ pub enum Expr {
 }
 
 impl AST for Expr {
-    type Generous = welly::Expr;
+    type Generous = expr::Expr;
 
     fn validate(report: &mut impl FnMut(Location, &str), tree: &Self::Generous)
     -> Result<Self, Invalid> {
         Ok(match tree {
-            welly::Expr::Char(c) => Self::Literal(Literal::Char(*c)),
-            welly::Expr::String(s) => Self::Literal(Literal::Str(s.clone())),
-            welly::Expr::Name(s) => {
+            expr::Expr::Char(c) => Self::Literal(Literal::Char(*c)),
+            expr::Expr::String(s) => Self::Literal(Literal::Str(s.clone())),
+            expr::Expr::Name(s) => {
                 let c = s.0.chars().next().expect("Should be non-empty");
                 if matches!(c, '0'..='9') {
                     Self::Literal(Literal::Int(Loc::<u64>::validate(report, s)?))
@@ -285,13 +287,13 @@ impl AST for Expr {
                     Self::Name(Name::validate(report, s)?)
                 }
             },
-            welly::Expr::Round(round) => {
+            expr::Expr::Round(round) => {
                 let loc = Location::EVERYWHERE; // TODO.
                 Tuple::validate(report, round)?.bracket_or_tuple(
                     |asts| Self::Tuple(Loc(asts, loc))
                 )
             },
-            welly::Expr::Function(name, Loc(params, loc), return_type, body) => {
+            expr::Expr::Function(name, Loc(params, loc), return_type, body) => {
                 let name = Option::<Name>::validate(report, name);
                 let params = Tuple::validate(report, params);
                 let return_type = Option::<Box<Type>>::validate(report, return_type);
@@ -302,7 +304,7 @@ impl AST for Expr {
                     Self::FunctionType(name?, Loc(params?.0, *loc), return_type?)
                 }
             },
-            welly::Expr::Op(left, op, right) => {
+            expr::Expr::Op(left, op, right) => {
                 match op {
                     Loc(Op::Cast, loc) => {
                         let left = compulsory(left, || report(*loc, "Missing expression"))?;
@@ -315,13 +317,13 @@ impl AST for Expr {
                     _ => { todo!() },
                 }
             },
-            welly::Expr::Field(object, field) => {
+            expr::Expr::Field(object, field) => {
                 let object = compulsory(object, || report(field.1, "Missing expression before `.field`"))?;
                 let object = Box::<Self>::validate(report, object);
                 let field = Name::validate(report, field);
                 Self::Field(object?, field?)
             },
-            welly::Expr::Call(fn_, Loc(args, loc)) => {
+            expr::Expr::Call(fn_, Loc(args, loc)) => {
                 let fn_ = fn_.as_ref().expect("Should have parsed as a tuple");
                 let args = Tuple::validate(report, args);
                 if let Some(tag) = Tag::maybe_validate_expr(fn_) {
@@ -344,11 +346,11 @@ type Type = Expr;
 pub struct Case(Location, Box<LExpr>, Block);
 
 impl AST for Case {
-    type Generous = welly::Case;
+    type Generous = stmt::Case;
 
     fn validate(report: &mut impl FnMut(Location, &str), case: &Self::Generous)
     -> Result<Self, Invalid> {
-        let crate::stmt::Case(loc, pattern, body) = case;
+        let stmt::Case(loc, pattern, body) = case;
         let pattern = compulsory(pattern, || report(*loc, "Missing pattern after `case`"))?;
         let pattern = Box::<LExpr>::validate(report, pattern);
         let body = Block::validate(report, body);
@@ -362,11 +364,11 @@ impl AST for Case {
 pub struct Else(Location, Block);
 
 impl AST for Else {
-    type Generous = welly::Else;
+    type Generous = stmt::Else;
 
     fn validate(report: &mut impl FnMut(Location, &str), else_: &Self::Generous)
     -> Result<Self, Invalid> {
-        let crate::stmt::Else(loc, body) = else_;
+        let stmt::Else(loc, body) = else_;
         Ok(Else(*loc, Block::validate(report, body)?))
     }
 }
@@ -393,19 +395,19 @@ pub enum Stmt {
 }
 
 impl AST for Stmt {
-    type Generous = welly::Stmt;
+    type Generous = stmt::Stmt;
 
     fn validate(report: &mut impl FnMut(Location, &str), tree: &Self::Generous)
     -> Result<Self, Invalid> {
         Ok(match tree {
-            welly::Stmt::Expr(expr) => {
+            stmt::Stmt::Expr(expr) => {
                 if let Some(expr) = expr.as_ref() {
                     Self::Expr(Box::<Expr>::validate(report, expr)?)
                 } else {
                     Self::Empty
                 }
             },
-            welly::Stmt::Assign(lhs, Loc(op, loc), rhs) => {
+            stmt::Stmt::Assign(lhs, Loc(op, loc), rhs) => {
                 let lhs = compulsory(lhs,
                     || report(*loc, "Missing pattern on left-hand side of assignment")
                 )?;
@@ -420,25 +422,25 @@ impl AST for Stmt {
                     AssignOp::Op(op) => Self::Mut(lhs?, Loc(*op, *loc), rhs?),
                 }
             },
-            welly::Stmt::If(loc, condition, body, else_) => {
+            stmt::Stmt::If(loc, condition, body, else_) => {
                 let condition = compulsory(condition, || report(*loc, "Missing condition"))?;
                 let condition = Box::<Expr>::validate(report, condition);
                 let body = Block::validate(report, body);
                 let else_ = Option::<Else>::validate(report, else_);
                 Self::If(*loc, condition?, body?, else_?)
             },
-            welly::Stmt::While(loc, condition, body, else_) => {
+            stmt::Stmt::While(loc, condition, body, else_) => {
                 let condition = compulsory(condition, || report(*loc, "Missing condition"))?;
                 let condition = Box::<Expr>::validate(report, condition);
                 let body = Block::validate(report, body);
                 let else_ = Option::<Else>::validate(report, else_);
                 Self::While(*loc, condition?, body?, else_?)
             },
-            welly::Stmt::For(loc, item_in_sequence, body, else_) => {
+            stmt::Stmt::For(loc, item_in_sequence, body, else_) => {
                 let item_in_sequence = compulsory(item_in_sequence,
                     || report(*loc, "Missing `in` after `for`")
                 )?;
-                if let welly::Expr::Op(item, Loc(Op::In, in_loc), sequence) = &**item_in_sequence {
+                if let expr::Expr::Op(item, Loc(Op::In, in_loc), sequence) = &**item_in_sequence {
                     let item = compulsory(item,
                         || report(*loc, "Missing item pattern after `for`")
                     )?;
@@ -452,7 +454,7 @@ impl AST for Stmt {
                     Self::For(*loc, item?, sequence?, body?, else_?)
                 } else { Err(report(*loc, "Missing `in` after for"))? }
             },
-            welly::Stmt::Switch(loc, discriminant, cases, else_) => {
+            stmt::Stmt::Switch(loc, discriminant, cases, else_) => {
                 let discriminant = compulsory(discriminant, || report(*loc, "Missing condition"))?;
                 let discriminant = Box::<Expr>::validate(report, discriminant);
                 let cases: Vec<Result<Case, Invalid>> = cases.iter().map(
@@ -462,7 +464,7 @@ impl AST for Stmt {
                 let else_ = Option::<Else>::validate(report, else_);
                 Self::Switch(*loc, discriminant?, cases?, else_?)
             },
-            welly::Stmt::Verb(Loc(verb, loc), expr) => match verb {
+            stmt::Stmt::Verb(Loc(verb, loc), expr) => match verb {
                 Verb::Break => {
                     if let Some(_) = expr { Err(report(*loc, "Unexpected expression after `break`"))? }
                     Self::Break(*loc)
@@ -497,16 +499,16 @@ impl AST for Stmt {
 pub struct Block(Box<[Stmt]>);
 
 impl AST for Block {
-    type Generous = welly::Brace;
+    type Generous = Brace;
 
-    fn validate(report: &mut impl FnMut(Location, &str), tree: &welly::Brace)
+    fn validate(report: &mut impl FnMut(Location, &str), tree: &Brace)
     -> Result<Self, Invalid> {
         let mut ret = Vec::new();
         let mut is_valid = true;
         for Token(Loc(result, loc)) in &tree.0 {
             match result {
                 Ok(tree) => {
-                    if let Some(tree) = tree.downcast_ref::<welly::Stmt>() {
+                    if let Some(tree) = tree.downcast_ref::<stmt::Stmt>() {
                         ret.push(Stmt::validate(report, tree)?);
                     } else {
                         report(*loc, "Expected a statement");

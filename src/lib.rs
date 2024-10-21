@@ -16,40 +16,10 @@ pub mod stmt;
 mod buffer;
 pub use buffer::{Buffer};
 
-/// Re-exports all the Welly parse [`Tree`] types (except [`char`]) and [`Op`].
-///
-/// [`Op`]: expr::Op
-pub mod welly {
-    use super::*;
-
-    pub type Comment = lexer::Comment;
-    pub type CharacterLiteral = lexer::CharacterLiteral;
-    pub type StringLiteral = lexer::StringLiteral;
-    pub type Whitespace = word::Whitespace;
-    pub type Symbol = word::Symbol;
-    pub type Alphanumeric = word::Alphanumeric;
-    pub type Round = bracket::Round;
-    pub type Square = bracket::Square;
-    pub type Brace = bracket::Brace;
-    pub type Op = expr::Op;
-    pub type Expr = expr::Expr;
-    pub type MaybeExpr = expr::MaybeExpr;
-    pub type AssignOp = stmt::AssignOp;
-    pub type Verb = stmt::Verb;
-    pub type Case = stmt::Case;
-    pub type Else = stmt::Else;
-    pub type Stmt = stmt::Stmt;
-}
-
-mod valid;
-pub use valid::{Invalid, AST};
-
-pub mod ast;
-
 /// Re-exports all the Welly [`Parse`] implementations and [`Brackets`].
 pub mod parsers {
     use super::*;
-    use welly::{Round, Brace};
+    use bracket::{Round, Brace};
 
     pub const LEXER: lexer::Parser = lexer::Parser;
 
@@ -97,6 +67,11 @@ pub mod parsers {
     pub const EXPR: expr::Parser = expr::Parser;
     pub const STMT: stmt::Parser = stmt::Parser;
 }
+
+mod valid;
+pub use valid::{Invalid, AST};
+
+pub mod ast;
 
 // ----------------------------------------------------------------------------
 

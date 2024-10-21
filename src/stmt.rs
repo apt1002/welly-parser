@@ -1,7 +1,8 @@
 //! Welly's imperative statements.
 
-use super::{welly, Tree, Location, Loc, Stream, Context, Parse};
-use welly::{Brace, MaybeExpr, Expr, Op};
+use super::{expr, bracket, Tree, Location, Loc, Stream, Context, Parse};
+use expr::{MaybeExpr, Expr, Op};
+use bracket::{Brace};
 
 pub const MISSING_SEMICOLON: &'static str = "Missing `;`";
 pub const MISSING_ELSE_BODY: &'static str = "Missing `else` body";
@@ -259,8 +260,8 @@ impl Parse for Parser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{welly, parsers, EndOfFile, Characters};
-    use welly::{Round, Brace};
+    use crate::{parsers, EndOfFile, Characters};
+    use bracket::{Round};
     use parsers::{Brackets};
 
     /// Parse a [`Stream`] containing [`Brace`]s into [`Round`]s and [`Expr`]s.

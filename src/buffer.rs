@@ -1,6 +1,6 @@
 use std::rc::{Rc};
 
-use super::{welly, parsers, EndOfFile, Location, Token, Stream, Characters, Parse};
+use super::{bracket, stmt, parsers, EndOfFile, Location, Token, Stream, Characters, Parse};
 
 /// Pipes `source` (which should produce [`char`]s) through:
 /// - a lexer,
@@ -23,8 +23,8 @@ fn skip(stream: &mut impl Stream) -> Option<Location> {
         let token = stream.read();
         if token.is_incomplete() || token.is::<EndOfFile>() { return None; }
         if token == ';' { return Some(token.location()); }
-        if token.is::<welly::Brace>() { return Some(token.location()); }
-        if token.is::<welly::Stmt>() {
+        if token.is::<bracket::Brace>() { return Some(token.location()); }
+        if token.is::<stmt::Stmt>() {
             // Oops! We read too far. Oh well, discard it.
             return Some(token.location());
         }
@@ -97,7 +97,8 @@ impl Buffer {
     /// we need to wait for more, or because there is no more. In this case
     /// `self` is not modified.
     ///
-    /// [`Stmt`]: welly::Stmt
+    /// [`Stmt`]: smtm::Stmt
+    // TODO: Return an `ast::Stmt`.
     pub fn try_parse(&mut self) -> Option<(Rc<str>, Token)> {
         let (token, end) = {
             let source = Characters::new(self.remainder(), self.is_complete);

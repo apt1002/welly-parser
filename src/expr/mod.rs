@@ -1,7 +1,9 @@
 //! Welly's expressions.
 
-use super::{welly, Tree, Location, Loc, Stream, Context, Parse};
-use welly::{Comment, CharacterLiteral, StringLiteral, Whitespace, Alphanumeric, Round, Brace};
+use super::{lexer, word, bracket, Tree, Location, Loc, Stream, Context, Parse};
+use lexer::{Comment, CharacterLiteral, StringLiteral};
+use word::{Whitespace, Alphanumeric};
+use bracket::{Round, Brace};
 
 mod op;
 pub use op::{Precedence, Op};
@@ -189,8 +191,7 @@ impl Parse for Parser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{welly, parsers, EndOfFile, Characters};
-    use welly::{Round, Brace};
+    use crate::{parsers, EndOfFile, Characters};
     use parsers::{Brackets};
 
     /// Parse a [`Stream`] containing [`Round`]s and [`Brace`]s into [`Expr`]s.
