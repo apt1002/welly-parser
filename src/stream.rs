@@ -22,7 +22,7 @@ impl Location {
 
 impl fmt::Debug for Location {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_fmt(format_args!("{}..{}", self.start, self.end))
+        write!(f, "{}..{}", self.start, self.end)
     }
 }
 
@@ -36,12 +36,19 @@ impl From<Range<usize>> for Location {
 ///
 /// This is commonly used to represent bits of a parse tree, remembering where
 /// they came from in the source code.
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct Loc<T>(pub T, pub Location);
 
 impl<T> Loc<T> {
     /// Convert an `&Loc<T>` to a `Loc<&T>`.
     pub fn as_ref(&self) -> Loc<&T> { Loc(&self.0, self.1) }
+}
+
+impl<T: fmt::Debug> fmt::Debug for Loc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)?;
+        write!(f, " ({:?})", self.1)
+    }
 }
 
 impl<U, T: PartialEq<U>> PartialEq<U> for Loc<T> {
