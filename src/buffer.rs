@@ -110,7 +110,7 @@ impl Buffer {
             if token.result_ref().is_err() { if let Some(loc) = skip(&mut stream) { end = loc.end; } }
             (token, end)
         };
-        let s: String = self.source.drain(..end).collect();
+        let s: String = self.source.drain(..std::cmp::min(end, self.source.len())).collect();
         Some((s.into(), token))
     }
 }
