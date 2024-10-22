@@ -123,6 +123,7 @@ impl Parser {
         if_missing: &'static str,
     ) -> Result<(char, bool), String> {
         if let Some(c) = input.read::<char>()? {
+            if *c == '\n' { input.unread(c); return Err(if_missing)? }
             if *c != '\\' { return Ok((*c, false)); }
         } else {
             Err(if_missing)?
@@ -146,12 +147,28 @@ impl Parser {
         
     }
 
+    /// Discards characters from `input` up to the next `end` or newline.
+    fn skip_until(
+        &self,
+        input: &mut Context<impl Stream>,
+        end: char,
+    ) -> Result<(), String> {
+        while let Some(c) = input.read::<char>()? {
+            let _ = input.pop();
+            if *c == '\n' || *c == end { break; }
+        }
+        Ok(())
+    }
+
     /// Parse a character literal, starting after the initial `'`.
     fn parse_character_literal(
         &self,
         input: &mut Context<impl Stream>,
     ) -> Result<Box<dyn Tree>, String> {
-        let (c, is_escaped) = self.parse_char(input, MISSING_CHAR)?;
+        let (c, is_escaped) = self.parse_char(input, MISSING_CHAR).or_else(|e| {
+            self.skip_until(input, '\'')?;
+            Err(e)
+        })?;
         if c == '\'' && !is_escaped { Err(MISSING_CHAR)? }
         if let Some(c2) = input.read::<char>()? {
             if *c2 != '\'' { input.unread(c2); Err(UNTERMINATED_CHAR)? }
@@ -168,7 +185,10 @@ impl Parser {
     ) -> Result<Box<dyn Tree>, String> {
         let mut s = String::new();
         loop {
-            let (c, is_escaped) = self.parse_char(input, UNTERMINATED_STRING)?;
+            let (c, is_escaped) = self.parse_char(input, UNTERMINATED_STRING).or_else(|e| {
+                self.skip_until(input, '\"')?;
+                Err(e)
+            })?;
             if c == '"' && !is_escaped { break; }
             s.push(c);
         }
@@ -250,7 +270,7 @@ mod tests {
 
     #[test]
     fn escapes() {
-        let mut stream = Parser.parse_stream(Characters::new("f(\"h\\\"w\\\"!\", '\n')", true));
+        let mut stream = Parser.parse_stream(Characters::new("f(\"h\\\"w\\\"!\", '\\n')", true));
         assert_eq!(stream.read(), 'f');
         assert_eq!(stream.read(), '(');
         assert_eq!(stream.read(), StringLiteral("h\"w\"!".into()));
@@ -262,11 +282,17 @@ mod tests {
     }
 
     #[test]
+    fn bad_newline() {
+        let mut stream = Parser.parse_stream(Characters::new("'\n'", true));
+        assert_eq!(stream.read().unwrap_err(), MISSING_CHAR);
+        assert_eq!(stream.read().unwrap_err(), MISSING_CHAR);
+        assert_eq!(stream.read(), EndOfFile);
+    }
+
+    #[test]
     fn bad_char() {
         let mut stream = Parser.parse_stream(Characters::new("'\\j'", true));
         assert_eq!(stream.read().unwrap_err(), MISSING_SEQUENCE);
-        assert_eq!(stream.read(), 'j');
-        assert_eq!(stream.read().unwrap_err(), MISSING_CHAR);
         assert_eq!(stream.read(), EndOfFile);
     }
 
@@ -274,8 +300,6 @@ mod tests {
     fn bad_str() {
         let mut stream = Parser.parse_stream(Characters::new("\"a\\j\"", true));
         assert_eq!(stream.read().unwrap_err(), MISSING_SEQUENCE);
-        assert_eq!(stream.read(), 'j');
-        assert_eq!(stream.read().unwrap_err(), UNTERMINATED_STRING);
         assert_eq!(stream.read(), EndOfFile);
     }
 
