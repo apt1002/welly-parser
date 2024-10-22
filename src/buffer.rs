@@ -99,6 +99,8 @@ impl Buffer {
     ///
     /// [`Stmt`]: smtm::Stmt
     // TODO: Return an `ast::Stmt`.
+    // TODO: Returns as many `Token`s as possible using a single parser, so
+    //       that skipping after an error works correctly.
     pub fn try_parse(&mut self) -> Option<(Rc<str>, Token)> {
         let (token, end) = {
             let source = Characters::new(self.remainder(), self.is_complete);

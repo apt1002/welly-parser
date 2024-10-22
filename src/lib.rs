@@ -13,9 +13,6 @@ pub mod bracket;
 pub mod expr;
 pub mod stmt;
 
-mod buffer;
-pub use buffer::{Buffer};
-
 /// Re-exports all the Welly [`Parse`] implementations and [`Brackets`].
 pub mod parsers {
     use super::*;
@@ -72,6 +69,9 @@ mod valid;
 pub use valid::{Invalid, AST};
 
 pub mod ast;
+
+mod buffer;
+pub use buffer::{Buffer};
 
 // ----------------------------------------------------------------------------
 
