@@ -65,6 +65,9 @@ impl Buffer {
     /// Returns the suffix of the source code that has not yet been parsed.
     pub fn remainder(&self) -> &str { &self.source }
 
+    /// Discard `remainder()`.
+    pub fn clear(&mut self) { self.source.clear(); }
+
     /// Append `source` to the source code. Requires `!self.is_complete()`.
     pub fn push_str(&mut self, source: &str) {
         assert!(!self.is_complete());

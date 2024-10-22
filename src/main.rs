@@ -16,6 +16,7 @@ pub fn echo<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<(
     let mut line = String::new();
     while !buffer.is_complete() {
         if buffer.remainder().trim().is_empty() {
+            buffer.clear();
             writeln!(output, "\nWelly!")?;
         }
         output.flush()?;
