@@ -10,7 +10,7 @@ impl From<()> for Invalid {
 }
 
 /// Represents a valid abstract syntax tree of some valid Welly source code.
-pub trait AST: Sized {
+pub trait AST: Sized + std::fmt::Debug {
     /// The parser type that turns into `Self`.
     type Generous;
 

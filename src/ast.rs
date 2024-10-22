@@ -1,3 +1,5 @@
+use std::{fmt};
+
 use super::{bracket, expr, stmt, Tree, Location, Loc, Token, Invalid, AST};
 use bracket::{Round, Brace};
 use expr::{Op};
@@ -23,6 +25,7 @@ fn only<T>(array: Box<[T]>) -> Result<T, Box<[T]>> {
 /// Represents a comma-separated tuple of `A`s in round brackets.
 ///
 /// The `bool` indicates if there is a trailing comma.
+#[derive(Debug, Clone)]
 pub struct Tuple<A>(pub Box<[A]>, pub bool);
 
 impl<A> Tuple<A> {
@@ -70,7 +73,7 @@ impl<A: AST> AST for Tuple<A> where
             }
         }
         
-        let mut state = State {asts: Vec::new(), report, is_valid: true, trailing_comma: false};
+        let mut state = State {asts: Vec::new(), report, is_valid: true, trailing_comma: true};
         let mut contents = round.0.iter();
         while let Some(&Token(Loc(ref result, loc))) = contents.next() {
             match result {
@@ -103,10 +106,21 @@ impl<A: AST> AST for Tuple<A> where
 // ----------------------------------------------------------------------------
 
 /// A Literal expression, representing a constant value.
+#[derive(Clone)]
 pub enum Literal {
     Int(Loc<u64>),
     Char(Loc<char>),
     Str(Loc<String>),
+}
+
+impl fmt::Debug for Literal {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Int(i) => i.fmt(f),
+            Self::Char(c) => c.fmt(f),
+            Self::Str(s) => s.fmt(f),
+        }
+    }
 }
 
 impl AST for Loc<u64> {
@@ -126,7 +140,7 @@ impl AST for Loc<u64> {
 ///
 /// Identifiers are written with capital and lower-case letters, digits and
 /// underscores, and do not start with a digit.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Name(Loc<String>);
 
 impl std::borrow::Borrow<str> for Name {
@@ -147,6 +161,10 @@ impl Name {
     }
 }
 
+impl fmt::Debug for Name {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.0.fmt(f) }
+}
+
 impl AST for Name {
     type Generous = Loc<String>;
 
@@ -162,8 +180,12 @@ impl AST for Name {
 ///
 /// Tags are written with capital letters, digits and underscores, and do not
 /// start with a digit.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Tag(Loc<String>);
+
+impl fmt::Debug for Tag {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.0.fmt(f) }
+}
 
 impl std::borrow::Borrow<str> for Tag {
     fn borrow(&self) -> &str { self.0.0.borrow() }
@@ -191,6 +213,7 @@ impl Tag {
 // ----------------------------------------------------------------------------
 
 /// An expression that can appear on the left-hand side of an assignment.
+#[derive(Debug, Clone)]
 pub enum LExpr {
     Name(Name),
     Literal(Literal),
@@ -258,6 +281,7 @@ impl AST for LExpr {
 // ----------------------------------------------------------------------------
 
 /// An expression.
+#[derive(Debug, Clone)]
 pub enum Expr {
     Name(Name),
     Literal(Literal),
@@ -343,6 +367,7 @@ type Type = Expr;
 // ----------------------------------------------------------------------------
 
 /// A `case` clause.
+#[derive(Debug, Clone)]
 pub struct Case(Location, Box<LExpr>, Block);
 
 impl AST for Case {
@@ -361,6 +386,7 @@ impl AST for Case {
 // ----------------------------------------------------------------------------
 
 /// An `else` clause.
+#[derive(Debug, Clone)]
 pub struct Else(Location, Block);
 
 impl AST for Else {
@@ -376,6 +402,7 @@ impl AST for Else {
 // ----------------------------------------------------------------------------
 
 /// A statement.
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Empty,
     Expr(Box<Expr>),
@@ -496,6 +523,7 @@ impl AST for Stmt {
 // ----------------------------------------------------------------------------
 
 /// A block of [`Stmt`]s.
+#[derive(Debug, Clone)]
 pub struct Block(Box<[Stmt]>);
 
 impl AST for Block {
