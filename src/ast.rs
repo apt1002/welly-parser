@@ -220,7 +220,7 @@ pub enum LExpr {
     Tuple(Loc<Box<[LExpr]>>),
     Field(Box<LExpr>, Name),
     Tag(Tag, Loc<Box<[LExpr]>>),
-    Cast(Box<LExpr>, Location, Box<Type>),
+    Cast(Location, Box<LExpr>, Box<Type>),
 }
 
 impl AST for LExpr {
@@ -249,15 +249,15 @@ impl AST for LExpr {
                 Err(report(params.1, "Expression is not assignable"))?
             },
             expr::Expr::Op(left, op, right) => {
-                match op {
-                    Loc(Op::Cast, loc) => {
-                        let left = compulsory(left, || report(*loc, "Missing left operand"))?;
-                        let right = compulsory(right, || report(*loc, "Missing right operand"))?;
+                match op.0 {
+                    Op::Cast => {
+                        let left = compulsory(left, || report(op.1, "Missing left operand"))?;
+                        let right = compulsory(right, || report(op.1, "Missing right operand"))?;
                         let left = Box::<Self>::validate(report, &*left);
                         let right = Box::<Type>::validate(report, &*right);
-                        Self::Cast(left?, *loc, right?)
+                        Self::Cast(op.1, left?, right?)
                     },
-                    Loc(Op::Missing, loc) => Err(report(*loc, "Missing operator"))?,
+                    Op::Missing => Err(report(op.1, "Missing operator"))?,
                     _ => Err(report(op.1, "This operator does not make an assignable expression"))?,
                 }
             },
@@ -286,13 +286,14 @@ pub enum Expr {
     Name(Name),
     Literal(Literal),
     Tuple(Loc<Box<[Expr]>>),
-    Op(Box<Expr>, Loc<Op>, Box<Expr>),
+    Unary(Loc<Op>, Box<Expr>),
+    Binary(Loc<Op>, Box<Expr>, Box<Expr>),
     Function(Option<Name>, Loc<Box<[LExpr]>>, Option<Box<Type>>, Block),
     FunctionType(Option<Name>, Loc<Box<[LExpr]>>, Option<Box<Type>>),
     Field(Box<Expr>, Name),
     Tag(Tag, Loc<Box<[Expr]>>),
     Call(Box<Expr>, Loc<Box<[Expr]>>),
-    Cast(Box<Expr>, Location, Box<Expr>),
+    Cast(Location, Box<Expr>, Box<Expr>),
 }
 
 impl AST for Expr {
@@ -329,16 +330,31 @@ impl AST for Expr {
                 }
             },
             expr::Expr::Op(left, op, right) => {
-                match op {
-                    Loc(Op::Cast, loc) => {
-                        let left = compulsory(left, || report(*loc, "Missing expression"))?;
-                        let right = compulsory(right, || report(*loc, "Missing expression"))?;
+                match op.0.precedence() {
+                    (None, None) => panic!("Nonfix operator"),
+                    (Some(_), None) => {
+                        let left = compulsory(left, || report(op.1, "Missing left operand"))?;
                         let left = Box::<Self>::validate(report, left);
-                        let right = Box::<Type>::validate(report, right);
-                        Self::Cast(left?, *loc, right?)
+                        if !right.is_none() { Err(report(op.1, "Unexpected right operand"))? }
+                        Self::Unary(*op, left?)
                     },
-                    Loc(Op::Missing, loc) => Err(report(*loc, "Missing operator"))?,
-                    _ => { todo!() },
+                    (None, Some(_)) => {
+                        let right = compulsory(right, || report(op.1, "Missing right operand"))?;
+                        let right = Box::<Self>::validate(report, right);
+                        if !left.is_none() { Err(report(op.1, "Unexpected right operand"))? }
+                        Self::Unary(*op, right?)
+                    },
+                    (Some(_), Some(_)) => {
+                        let left = compulsory(left, || report(op.1, "Missing left operand"))?;
+                        let left = Box::<Self>::validate(report, left);
+                        let right = compulsory(right, || report(op.1, "Missing right operand"))?;
+                        let right = Box::<Self>::validate(report, right);
+                        match op.0 {
+                            Op::Cast => Self::Cast(op.1, left?, right?),
+                            Op::Missing => Err(report(op.1, "Missing operator"))?,
+                            _ => Self::Binary(*op, left?, right?),
+                        }
+                    },
                 }
             },
             expr::Expr::Field(object, field) => {
