@@ -90,7 +90,7 @@ impl Buffer {
     pub fn is_complete(&self) -> bool { self.is_complete }
 
     /// Attempt to parse [`self.remainder()`]. Hopefully the returned [`Token`]
-    /// is a [`Stmt`]. Other possibilities can be found in [`welly`].
+    /// is a [`stmt::Stmt`].
     ///
     /// `Some((source, token))` indicates that there was enough source code to
     /// parse a `Token` (which might be an error message). [`Location`]s are
@@ -99,8 +99,6 @@ impl Buffer {
     /// `None` indicates that there was not enough source code, either because
     /// we need to wait for more, or because there is no more. In this case
     /// `self` is not modified.
-    ///
-    /// [`Stmt`]: smtm::Stmt
     // TODO: Return an `ast::Stmt`.
     // TODO: Returns as many `Token`s as possible using a single parser, so
     //       that skipping after an error works correctly.

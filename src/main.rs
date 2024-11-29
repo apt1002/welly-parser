@@ -11,6 +11,19 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
+pub fn report(output: &mut impl Write, source: &str, loc: Location, msg: &str) {
+    // Ignore errors.
+    let _ = writeln!(output, "\n{}: {}",
+        Red.paint("Error"),
+        msg,
+    );
+    let _ = writeln!(output, "{}{}{}",
+        &source[..loc.start],
+        Red.paint(&source[loc.start..loc.end]),
+        &source[loc.end..],
+    );
+}
+
 pub fn echo<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<()> {
     let mut buffer = Buffer::default();
     let mut line = String::new();
@@ -27,19 +40,8 @@ pub fn echo<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<(
             line.clear();
         }
         while let Some((source, token)) = buffer.try_parse() {
+            let mut report = |loc: Location, msg: &str| report(output, &*source, loc, msg);
             let loc = token.location();
-            let mut report = |location: Location, msg: &str| {
-                // Ignore errors.
-                let _ = writeln!(output, "\n{}: {}",
-                    Red.paint("Error"),
-                    msg,
-                );
-                let _ = writeln!(output, "{}{}{}",
-                    &source[..location.start],
-                    Red.paint(&source[location.start..location.end]),
-                    &source[location.end..],
-                );
-            };
             match token.result_ref() {
                 Ok(tree) => {
                     if let Some(stmt) = tree.downcast_ref::<stmt::Stmt>() {
