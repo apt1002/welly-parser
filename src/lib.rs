@@ -2,7 +2,7 @@ mod tree;
 pub use tree::{Tree, EndOfFile};
 
 mod stream;
-pub use stream::{Location, Loc, Token, Stream, Characters};
+pub use stream::{Location, Loc, Token, Stream, Tell, Characters};
 
 mod parser;
 pub use parser::{Context, Parse};

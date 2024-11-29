@@ -157,6 +157,19 @@ impl<I: Iterator<Item=Token>> Stream for I {
 
 // ----------------------------------------------------------------------------
 
+/// A [`Stream`] based on a stream of bytes, and equipped with byte positions.
+pub trait Tell: Stream {
+    /// Returns the byte position reached by this [`Stream`].
+    ///
+    /// More precisely, it should be possible to reconstruct this `Stream`
+    /// without loss of information based on the stream of bytes starting at
+    /// the returned position. If this `Stream` buffers any data, the returned
+    /// position must therefore be before the buffered data.
+    fn tell(&self) -> usize;
+}
+
+// ----------------------------------------------------------------------------
+
 /// A [`Stream`] through a [`str`].
 ///
 /// The [`Token`]s are `char`s. Their [`Location`]s are relative to the `str`.
@@ -182,17 +195,18 @@ impl<'a> Characters<'a> {
     pub fn new(source: &'a str, is_complete: bool) -> Self {
         Self {chars: source.chars(), length: source.len(), is_complete}
     }
-
-    /// Returns the current byte index in the `str`.
-    pub fn index(&self) -> usize { self.length - self.chars.as_str().len() }
 }
 
 impl<'a> Stream for Characters<'a> {
     fn read(&mut self) -> Token {
-        let start = self.index();
+        let start = self.tell();
         if let Some(c) = self.chars.next() {
-            let end = self.index();
+            let end = self.tell();
             Token::new(Box::new(c), start..end)
         } else if self.is_complete { Token::end_of_file() } else { Token::incomplete() }
     }
+}
+
+impl<'a> Tell for Characters<'a> {
+    fn tell(&self) -> usize { self.length - self.chars.as_str().len() }
 }

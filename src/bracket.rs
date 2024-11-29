@@ -1,6 +1,6 @@
 //! Welly's bracket matcher.
 
-use super::{Tree, EndOfFile, Location, Token, Stream};
+use super::{Tree, EndOfFile, Location, Token, Stream, Tell};
 
 pub const MISSING_OPEN: &'static str = "Unmatched close bracket";
 pub const MISSING_CLOSE: &'static str = "Unmatched open bracket";
@@ -115,6 +115,15 @@ impl<
         }
         token
     }
+}
+
+impl<
+    F: Fn(Vec<Token>) -> Box<dyn Tree>,
+    I: Stream + Tell,
+> Tell for Brackets<F, I> {
+    // Correct if `self.depth == 0`, which is true for public callers.
+    // Do not call from e.g. within `parse_bracket()`.
+    fn tell(&self) -> usize { self.input.tell() }
 }
 
 // ----------------------------------------------------------------------------

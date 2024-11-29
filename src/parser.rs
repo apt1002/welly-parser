@@ -1,4 +1,4 @@
-use super::{Tree, Location, Loc, Token, Stream};
+use super::{Tree, Location, Loc, Token, Stream, Tell};
 
 /// A high-level wrapper around an input [`Stream`].
 ///
@@ -108,6 +108,17 @@ impl<I: Stream> Context<I> {
     }
 }
 
+impl<I: Stream + Tell> Context<I> {
+    /// Similar to `Tell::tell()`.
+    fn tell(&self) -> usize {
+        if let Some(loc_tree) = self.stack.last() {
+            loc_tree.1.start
+        } else {
+            self.input.tell()
+        }
+    }
+}
+
 // ----------------------------------------------------------------------------
 
 /// Parse a [`Stream`].
@@ -161,4 +172,8 @@ impl<P: Parse, I: Stream> Stream for ParseStream<P, I> {
         let loc = if ret.is_ok() { all } else { last };
         Token(Loc(ret, loc))
     }
+}
+
+impl<P: Parse, I: Stream + Tell> Tell for ParseStream<P, I> {
+    fn tell(&self) -> usize { self.input.tell() }
 }
