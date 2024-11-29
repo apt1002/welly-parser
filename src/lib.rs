@@ -41,7 +41,15 @@ pub mod parsers {
     /// [`char`]s.
     ///
     /// [`Expr`]: expr::Expr
-    pub fn round(input: impl Stream) -> impl Stream {
+    pub fn round(input: impl Stream + Tell) -> impl Stream + Tell {
+        STMT.parse_stream(EXPR.parse_stream(Brackets::new('(', ')', |contents| {
+            let contents = EXPR.parse_stream(contents.into_iter()).read_all();
+            Round::new(contents)
+        }, input)))
+    }
+
+    /// Like `round()` but when `input` doesn't implement [`Tell`].
+    fn round_no_tell(input: impl Stream) -> impl Stream {
         STMT.parse_stream(EXPR.parse_stream(Brackets::new('(', ')', |contents| {
             let contents = EXPR.parse_stream(contents.into_iter()).read_all();
             Round::new(contents)
@@ -54,9 +62,9 @@ pub mod parsers {
     /// It parses a [`Stream`] containing words, lexemes and [`char`]s.
     ///
     /// [`Stmt`]: stmt::Stmt
-    pub fn brace(input: impl Stream) -> impl Stream {
+    pub fn brace(input: impl Stream + Tell) -> impl Stream + Tell {
         round(Brackets::new('{', '}', |contents| {
-            let contents = round(contents.into_iter()).read_all();
+            let contents = round_no_tell(contents.into_iter()).read_all();
             Brace::new(contents)
         }, input))
     }

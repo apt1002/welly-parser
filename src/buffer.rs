@@ -1,6 +1,6 @@
 use std::rc::{Rc};
 
-use super::{bracket, stmt, parsers, EndOfFile, Location, Token, Stream, Characters, Parse};
+use super::{bracket, stmt, parsers, EndOfFile, Location, Token, Stream, Tell, Characters, Parse};
 
 /// Pipes `source` (which should produce [`char`]s) through:
 /// - a lexer,
@@ -8,7 +8,10 @@ use super::{bracket, stmt, parsers, EndOfFile, Location, Token, Stream, Characte
 /// - two bracket matchers,
 /// - an [`Expr`] parser, and
 /// - (if the tightest brackets are not round) a [`Stmt`] parser.
-fn make_parser<'a>(source: impl 'a + Stream, word_parser: &'a parsers::Word) -> impl 'a + Stream {
+fn make_parser<'a>(
+    source: impl 'a + Stream + Tell,
+    word_parser: &'a parsers::Word,
+) -> impl 'a + Stream + Tell {
     let stream = parsers::LEXER.parse_stream(source);
     let stream = word_parser.parse_stream(stream);
     parsers::brace(stream)
