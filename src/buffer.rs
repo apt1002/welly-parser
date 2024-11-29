@@ -1,6 +1,6 @@
 use std::rc::{Rc};
 
-use super::{bracket, stmt, parsers, EndOfFile, Location, Token, Stream, Tell, Characters, Parse};
+use super::{bracket, stmt, parsers, EndOfFile, Token, Stream, Tell, Characters, Parse};
 
 /// Pipes `source` (which should produce [`char`]s) through:
 /// - a lexer,
@@ -17,19 +17,19 @@ fn make_parser<'a>(
     parsers::brace(stream)
 }
 
-/// Read [`Token`]s from `stream` until finding one that heuristically might be
-/// the end of a `Stmt`, and return its [`Location`] if successful.
+/// Discard [`Token`]s from `stream` up to one that heuristically might be
+/// the end of a `Stmt`.
 ///
 /// Use this only to recover after an error, because it discards source code.
-fn skip(stream: &mut impl Stream) -> Option<Location> {
+fn skip(stream: &mut impl Stream) {
     loop {
         let token = stream.read();
-        if token.is_incomplete() || token.is::<EndOfFile>() { return None; }
-        if token == ';' { return Some(token.location()); }
-        if token.is::<bracket::Brace>() { return Some(token.location()); }
+        if token.is_incomplete() || token.is::<EndOfFile>() { return; }
+        if token == ';' { return; }
+        if token.is::<bracket::Brace>() { return; }
         if token.is::<stmt::Stmt>() {
             // Oops! We read too far. Oh well, discard it.
-            return Some(token.location());
+            return;
         }
     }
 }
@@ -109,13 +109,15 @@ impl Buffer {
         let (token, end) = {
             let source = Characters::new(self.remainder(), self.is_complete);
             let mut stream = make_parser(source, &self.word_parser);
+            println!("stream.tell = {}", stream.tell());
             let token = stream.read();
+            println!("stream.tell = {}", stream.tell());
             if token.is_incomplete() || token.is::<EndOfFile>() { return None; }
-            // Split off some source code including at least `token.0`.
-            let mut end = token.location().end;
-            if token.result_ref().is_err() { if let Some(loc) = skip(&mut stream) { end = loc.end; } }
-            (token, end)
+            if token.result_ref().is_err() { skip(&mut stream); }
+            println!("stream.tell = {}", stream.tell());
+            (token, stream.tell())
         };
+        // Split off some source code up to `end` (including at least `token`).
         let s: String = self.source.drain(..std::cmp::min(end, self.source.len())).collect();
         Some((s.into(), token))
     }
@@ -138,7 +140,10 @@ mod tests {
         if is_complete { buffer.complete(); }
         let mut tokens: Vec<String> = Vec::new();
         while let Some((s, token)) = buffer.try_parse() {
+            println!("s = {:?}", s);
+            println!("token = {:?}", token);
             let loc = token.location();
+            println!("loc = {:?}", loc);
             let span = String::from(&s[loc.start..loc.end]);
             tokens.push(span);
         }
