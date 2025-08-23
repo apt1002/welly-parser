@@ -97,4 +97,3 @@ impl Tree for char {}
 pub struct EndOfFile;
 
 impl Tree for EndOfFile {}
-

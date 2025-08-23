@@ -25,7 +25,7 @@ impl Tree for CharacterLiteral {}
 
 /// Represents a Welly string literal.
 ///
-/// A character literal consists of zero or more characters or escape sequences
+/// A string literal consists of zero or more characters or escape sequences
 /// enclosed in ASCII `"` characters.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StringLiteral(pub String);
@@ -112,7 +112,7 @@ impl Parser {
         char::from_u32(ret).ok_or_else(|| INVALID.into())
     }
 
-    /// Parse a single character or an escape sequence.
+    /// Parse a single non-newline character or an escape sequence.
     /// - if_missing - the error message if we don't receive a character.
     /// Returns:
     /// - the `char` value.
@@ -144,7 +144,6 @@ impl Parser {
             }
         }
         Err(MISSING_SEQUENCE)?
-        
     }
 
     /// Discards characters from `input` up to the next `end` or newline.

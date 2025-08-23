@@ -140,12 +140,11 @@ pub trait Stream {
     /// Read and return all `Token`s upto [`EndOfFile`], which is discarded.
     fn read_all(mut self) -> Vec<Token> where Self: Sized {
         let mut ret = Vec::new();
-        let mut token = self.read();
-        while token != EndOfFile {
+        loop {
+            let token = self.read();
+            if token == EndOfFile { return ret; }
             ret.push(token);
-            token = self.read();
         }
-        ret
     }
 }
 
