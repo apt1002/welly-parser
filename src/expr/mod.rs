@@ -283,7 +283,7 @@ mod tests {
     #[test]
     fn ergonomics1() {
         let tree = parse_one("item in low .. high and condition");
-        let (tree, condition) = check_op(tree, Op::BoolAnd);
+        let (tree, condition) = check_op(tree, Op::And);
         check_name(condition, "condition");
         let (item, tree) = check_op(tree, Op::In);
         check_name(item, "item");
@@ -294,19 +294,17 @@ mod tests {
 
     #[test]
     fn ergonomics2() {
-        let tree = parse_one("0 == x & 1 << 4");
+        let tree = parse_one("0 == x << 4");
         let (zero, tree) = check_op(tree, Op::EQ);
         check_name(zero, "0");
-        let (x, tree) = check_op(tree, Op::BitAnd);
+        let (x, four) = check_op(tree, Op::SL);
         check_name(x, "x");
-        let (one, four) = check_op(tree, Op::SL);
-        check_name(one, "1");
         check_name(four, "4");
     }
 
     #[test]
     fn ergonomics3() {
-        let tree = parse_one("-x ** 2");
+        let tree = parse_one("-x ^ 2");
         let (none, tree) = check_op(tree, Op::Minus);
         assert!(none.is_none());
         let (x, two) = check_op(tree, Op::Pow);
@@ -360,7 +358,7 @@ mod tests {
     #[test]
     fn ergonomics8() {
         let tree = parse_one("x: type >= 0");
-        let (tree, zero) = check_op(tree, Op::GE);
+        let (tree, zero) = check_op(tree, Op::SGE);
         check_name(zero, "0");
         let (x, type_) = check_op(tree, Op::Cast);
         check_name(x, "x");

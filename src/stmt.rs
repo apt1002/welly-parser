@@ -58,18 +58,17 @@ impl Tree for AssignOp {
     fn declare_keywords(mut declare: impl FnMut(&'static str, Self)) {
         declare("=", Self::Let);
         declare(":=", Self::Set);
-        declare("|=", Self::Op(Op::BitOr));
-        declare("^=", Self::Op(Op::BitXor));
-        declare("&=", Self::Op(Op::BitAnd));
         declare("<<=", Self::Op(Op::SL));
-        declare(">>=", Self::Op(Op::ASR));
-        declare(">>>=", Self::Op(Op::LSR));
+        declare(">>=", Self::Op(Op::SSR));
+        declare(">>+=", Self::Op(Op::USR));
         declare("+=", Self::Op(Op::Add));
         declare("-=", Self::Op(Op::Sub));
         declare("*=", Self::Op(Op::Mul));
-        declare("/=", Self::Op(Op::Div));
-        declare("%=", Self::Op(Op::Rem));
-        declare("**=", Self::Op(Op::Pow));
+        declare("/=", Self::Op(Op::SDiv));
+        declare("/+=", Self::Op(Op::UDiv));
+        declare("%=", Self::Op(Op::SRem));
+        declare("%+=", Self::Op(Op::URem));
+        declare("^=", Self::Op(Op::Pow));
     }
 }
 
