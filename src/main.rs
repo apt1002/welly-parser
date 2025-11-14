@@ -2,7 +2,7 @@ use std::{io};
 use io::{BufRead, Write};
 use ansi_term::Colour::{Red};
 
-use welly_parser::{stmt, ast, Location, Buffer, AST};
+use welly_parser::loc::{Location};
 
 fn main() -> std::io::Result<()> {
     let mut stdin = io::stdin().lock();
@@ -25,6 +25,7 @@ pub fn report(output: &mut impl Write, source: &str, loc: Location, msg: &str) {
 }
 
 pub fn echo<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<()> {
+    /* Old version.
     let mut buffer = Buffer::default();
     let mut line = String::new();
     while !buffer.is_complete() {
@@ -59,5 +60,6 @@ pub fn echo<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<(
             }
         }
     }
+    */
     Ok(())
 }

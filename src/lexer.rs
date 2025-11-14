@@ -1,36 +1,8 @@
 //! Welly's lexer.
 
-use super::{Tree, Stream, Context, Parse};
+use std::collections::{HashMap};
 
-/// Represents a line comment or a block comment.
-///
-/// A line comment begins with `//` and ends before a newline.
-/// A block comment begins with `/*` and ends with `*/`.
-/// The text of the comment can only be retrieved if you know its [`Location`].
-///
-/// [`Location`]: super::Location
-#[derive(Debug, Clone, PartialEq)]
-pub struct Comment;
-
-impl Tree for Comment {}
-
-/// Represents a Welly character literal.
-///
-/// A character literal consists of a single character or escape sequence
-/// enclosed in ASCII `'` characters.
-#[derive(Debug, Clone, PartialEq)]
-pub struct CharacterLiteral(pub char);
-
-impl Tree for CharacterLiteral {}
-
-/// Represents a Welly string literal.
-///
-/// A string literal consists of zero or more characters or escape sequences
-/// enclosed in ASCII `"` characters.
-#[derive(Debug, Clone, PartialEq)]
-pub struct StringLiteral(pub String);
-
-impl Tree for StringLiteral {}
+use super::enums::{BracketKind, Separator, Op, OpWord, ALL_OP_WORDS, ALL_ASSIGN_WORDS, StmtWord, ALL_STMT_WORDS};
 
 pub const UNTERMINATED_BLOCK_COMMENT: &'static str = "Unterminated block comment";
 pub const UNTERMINATED_STRING: &'static str = "Unterminated string";
@@ -53,6 +25,108 @@ fn hex_digit_value(c: char) -> Option<u32> {
 
 // ----------------------------------------------------------------------------
 
+/// A line comment or a block comment.
+///
+/// A line comment begins with `//` and ends before a newline.
+/// A block comment begins with `/*` and ends with `*/`.
+/// The text of the comment can only be retrieved if you know its [`Location`].
+///
+/// [`Location`]: super::Location
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Comment;
+
+/// Lexer tokens that can appear in expressions (without being enclosed in
+/// brackets).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Expr {
+    /// A Welly character literal.
+    ///
+    /// A character literal consists of a single character or escape sequence
+    /// enclosed in ASCII `'` characters.
+    CharacterLiteral(char),
+
+    /// A Welly string literal.
+    ///
+    /// A string literal consists of zero or more characters or escape sequences
+    /// enclosed in ASCII `"` characters.
+    StringLiteral(String),
+
+    /// A Welly identifier, tag or number: a maximal word made of letters,
+    /// digits and underscores.
+    Alphanumeric(String),
+
+    /// A Welly operator or constant.
+    Op(&'static OpWord),
+}
+
+/// Lexer tokens that can appear in statements but not in expressions (without
+/// being enclosed in brackets).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Stmt {
+    /// A Comma.
+    Separator(Separator),
+
+    /// A Welly assignment operator.
+    Assign(Option<Op>),
+
+    /// A keyword that introduces a statement.
+    Word(StmtWord),
+}
+
+/// The output type of the lexer.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Lexeme {
+    /// An indentation string: a maximal string of spaces starting at the
+    /// beginning of a line.
+    Indent(usize),
+
+    // A comment.
+    Comment(Comment),
+
+    /// Part of an expression.
+    Expr(Expr),
+
+    /// Part of a statement.
+    Stmt(Stmt),
+
+    /// An open bracket character.
+    Open(BracketKind),
+
+    /// A close bracket character.
+    Close(BracketKind),
+}
+
+// ----------------------------------------------------------------------------
+
+pub struct Lexer {
+    keywords: HashMap<&'static str, Lexeme>,
+}
+
+impl Default for Lexer {
+    fn default() -> Self {
+        let mut keywords = HashMap::new();
+        for pair in &ALL_OP_WORDS {
+            keywords.insert(pair.0, Lexeme::Expr(Expr::Op(&pair.1)));
+        }
+        for pair in &ALL_ASSIGN_WORDS {
+            keywords.insert(pair.0, Lexeme::Stmt(Stmt::Assign(pair.1)));
+        }
+        for &(word, stmt) in &ALL_STMT_WORDS {
+            keywords.insert(word, Lexeme::Stmt(Stmt::Word(stmt)));
+        }
+        Self {keywords}
+    }
+}
+
+// ----------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+}
+
+/* OLD version
+
 /// A [`Parse`] implementation that recognises [`Comment`]s,
 /// [`CharacterLiteral`]s and [`StringLiteral`]s.
 ///
@@ -70,7 +144,7 @@ impl Parser {
         Ok(Box::new(Comment))
     }
 
-    /// Parse a line comment, starting after the initial `/*`.
+    /// Parse a line comment, starting after the initial `/*`. */
     fn parse_block_comment(
         &self,
         input: &mut Context<impl Stream>,
@@ -260,7 +334,7 @@ mod tests {
 
     #[test]
     fn block_comment_eof() {
-        let mut stream = Parser.parse_stream(Characters::new("a /* b", true));
+        let mut stream = Parser.parse_stream(Characters::new("a /* b", true)); */
         assert_eq!(stream.read(), 'a');
         assert_eq!(stream.read(), ' ');
         assert_eq!(stream.read().unwrap_err(), UNTERMINATED_BLOCK_COMMENT);
@@ -318,3 +392,4 @@ mod tests {
         assert_eq!(stream.read(), EndOfFile);
     }
 }
+*/
