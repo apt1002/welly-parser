@@ -51,7 +51,7 @@ impl<A: AST> AST for Tuple<A> where
             is_valid: bool,
             trailing_comma: bool,
         }
-        
+
         impl<R: FnMut(Location, &str), A> State<'_, R, A> {
             /// Report an error.
             fn report(&mut self, loc: Location, msg: &str) {
@@ -72,7 +72,7 @@ impl<A: AST> AST for Tuple<A> where
                 self.trailing_comma = true;
             }
         }
-        
+
         let mut state = State {asts: Vec::new(), report, is_valid: true, trailing_comma: true};
         let mut contents = round.0.iter();
         while let Some(&Token(Loc(ref result, loc))) = contents.next() {

@@ -2,7 +2,7 @@ use super::{Location};
 
 /// The error type of [`AST::validate()`].
 ///
-/// This can conveniently be returned using the idoim `Err(report(...))?`.
+/// This can conveniently be returned using the idiom `Err(report(...))?`.
 pub struct Invalid;
 
 impl From<()> for Invalid {
