@@ -1,11 +1,15 @@
+use std::num::{NonZeroU8};
+
 /// Distinguishes the kinds of bracket.
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(u8)]
 pub enum BracketKind {Round, Square, Curly}
 
 // ----------------------------------------------------------------------------
 
 /// A separator character.
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(u8)]
 pub enum Separator {Comma, Semicolon}
 
 // ----------------------------------------------------------------------------
@@ -28,6 +32,7 @@ pub enum Separator {Comma, Semicolon}
 ///
 /// [`OpWord`]: super::OpWord
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(u8)]
 pub enum Op {
     // TODO: `when`.
     // TODO: `.`.
@@ -157,9 +162,9 @@ pub enum Op {
 /// Represents the binding precedence of an operator.
 /// No left-`Precedence` is ever equal to a right-`Precedence`.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Precedence(u8);
+pub struct Precedence(NonZeroU8);
 
-const fn p(n: u8) -> Option<Precedence> { Some(Precedence(n)) }
+const fn p(n: u8) -> Option<Precedence> { Some(Precedence(NonZeroU8::new(n).unwrap())) }
 
 /// An [`Op`] with its binding precedences.
 ///
@@ -190,7 +195,7 @@ impl OpInfo {
 /// the operator is preceded by an expression.
 ///
 /// If the operator has only one meaning, we put it in both slots.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct OpWord {
     /// The meaning of the operator if has a left operand.
     pub with_left: OpInfo,
@@ -274,6 +279,7 @@ pub const ALL_ASSIGN_WORDS: [(&'static str, Option<Op>); 12] = [
 // ----------------------------------------------------------------------------
 
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(u8)]
 pub enum StmtWord {
     /// `mod name;` defines a module from a source file.
     ///

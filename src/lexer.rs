@@ -49,21 +49,21 @@ pub enum Expr {
     ///
     /// A string literal consists of zero or more characters or escape sequences
     /// enclosed in ASCII `"` characters.
-    StringLiteral(String),
+    StringLiteral(Box<str>),
 
     /// A Welly identifier, tag or number: a maximal word made of letters,
     /// digits and underscores.
-    Alphanumeric(String),
+    Alphanumeric(Box<str>),
 
     /// A Welly operator or constant.
-    Op(&'static OpWord),
+    Op(OpWord),
 }
 
 /// Lexer tokens that can appear in statements but not in expressions (without
 /// being enclosed in brackets).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
-    /// A Comma.
+    /// A comma or semicolon.
     Separator(Separator),
 
     /// A Welly assignment operator.
@@ -105,11 +105,11 @@ pub struct Lexer {
 impl Default for Lexer {
     fn default() -> Self {
         let mut keywords = HashMap::new();
-        for pair in &ALL_OP_WORDS {
-            keywords.insert(pair.0, Lexeme::Expr(Expr::Op(&pair.1)));
+        for &(word, op) in &ALL_OP_WORDS {
+            keywords.insert(word, Lexeme::Expr(Expr::Op(op)));
         }
-        for pair in &ALL_ASSIGN_WORDS {
-            keywords.insert(pair.0, Lexeme::Stmt(Stmt::Assign(pair.1)));
+        for &(word, op) in &ALL_ASSIGN_WORDS {
+            keywords.insert(word, Lexeme::Stmt(Stmt::Assign(op)));
         }
         for &(word, stmt) in &ALL_STMT_WORDS {
             keywords.insert(word, Lexeme::Stmt(Stmt::Word(stmt)));
