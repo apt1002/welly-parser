@@ -32,12 +32,12 @@ fn hex_digit_value(c: char) -> Option<u32> {
 /// The text of the comment can only be retrieved if you know its [`Location`].
 ///
 /// [`Location`]: super::Location
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone)]
 pub struct Comment;
 
 /// Lexer tokens that can appear in expressions (without being enclosed in
 /// brackets).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     /// A Welly character literal.
     ///
@@ -61,7 +61,7 @@ pub enum Expr {
 
 /// Lexer tokens that can appear in statements but not in expressions (without
 /// being enclosed in brackets).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Stmt {
     /// A comma or semicolon.
     Separator(Separator),
@@ -74,7 +74,7 @@ pub enum Stmt {
 }
 
 /// The output type of the lexer.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Lexeme {
     /// An indentation string: a maximal string of spaces starting at the
     /// beginning of a line.

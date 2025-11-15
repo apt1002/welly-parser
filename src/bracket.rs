@@ -3,7 +3,7 @@ use enums::{BracketKind};
 use loc::{List};
 
 /// The output type of the bracket matcher.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Item {
     /// A comment.
     Comment(lexer::Comment),

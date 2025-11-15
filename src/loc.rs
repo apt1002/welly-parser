@@ -43,19 +43,8 @@ impl<T: fmt::Debug> fmt::Debug for Loc<T> {
     }
 }
 
-impl<U, T: PartialEq<U>> PartialEq<U> for Loc<T> {
-    fn eq(&self, other: &U) -> bool { self.0 == *other }
-}
-
 // ----------------------------------------------------------------------------
 
 /// A list of [`Loc<T>`]s.
 #[derive(Debug, Clone)]
 pub struct List<T>(Box<[Loc<T>]>);
-
-impl<T: PartialEq> PartialEq for List<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.iter().zip(other.0.iter()).all(|(t1, t2)| t1.0 == t2.0)
-    }
-}
-

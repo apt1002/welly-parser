@@ -1,15 +1,21 @@
+use std::{fmt};
+
 use super::{enums, lexer, loc};
-use enums::{Op, StmtWord};
-use loc::{List};
+use enums::{Separator, Op, StmtWord};
+use loc::{Loc, List};
 
 /// A `T` and its documentation.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone)]
 pub struct Doc<T>(T, List<lexer::Comment>);
+
+impl<T: fmt::Debug> fmt::Debug for Doc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.0.fmt(f) }
+}
 
 // ----------------------------------------------------------------------------
 
 /// Part of an expression. An expression is a [`List<Expr>`].
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     /// Part of an expression that isn't in brackets.
     Expr(lexer::Expr),
@@ -23,34 +29,33 @@ pub enum Expr {
 
 // ----------------------------------------------------------------------------
 
-/// A complete statement, or a comma.
-// TODO: `Location`s.
-#[derive(Debug, Clone, PartialEq)]
+/// A complete statement, or a [`Separator`].
+///
+/// The output type of the parser is [`Doc<Stmt>`].
+#[derive(Debug, Clone)]
 pub enum Stmt {
-    /// A comma.
-    Comma,
+    /// A comma or semicolon.
+    Separator(Loc<Separator>),
 
-    /// `expr;` evaluates `expr`. Used at the REPL, it prints out the value of
-    /// the expression.
-    ///
-    /// In round or square brackets, `expr` is part of a comma-separated list.
-    // TODO: When is the semicolon needed?
+    /// Any expression is a statement. Used at the REPL, it prints out the
+    /// value of the expression.
     Expr(List<Expr>),
 
     /// `pattern op= expr;` mutates the names in the pattern.
-    Assign(List<Expr>, Option<Op>, List<Expr>),
+    Assign(List<Expr>, Loc<Option<Op>>, List<Expr>),
 
     /// `keyword expr;`
     ///
     /// The meaning depends on the keyword. See [`StmtWord`].
-    Verb(StmtWord, List<Expr>),
+    Verb(Loc<StmtWord>, List<Expr>),
 
     /// `keyword expr { ... }`.
     ///
     /// The meaning depends on the keyword. See [`StmtWord`].
-    Control(StmtWord, List<Expr>, Block),
+    Control(Loc<StmtWord>, List<Expr>, Block),
 }
 
 // ----------------------------------------------------------------------------
 
-type Block = List<Doc<Stmt>>;
+/// Represents a sequence of statements inside curly brackets.
+type Block = Loc<List<Doc<Stmt>>>;
