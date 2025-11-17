@@ -11,11 +11,6 @@ pub struct Location {
     pub end: usize,
 }
 
-impl Location {
-    /// A dummy value that can be used for things like [`EndOfFile`].
-    pub const EVERYWHERE: Location = Location {start: usize::MIN, end: usize::MAX};
-}
-
 impl fmt::Debug for Location {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}..{}", self.start, self.end)
