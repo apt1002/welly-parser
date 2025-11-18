@@ -43,3 +43,19 @@ impl<T: fmt::Debug> fmt::Debug for Loc<T> {
 /// A list of [`Loc<T>`]s.
 #[derive(Debug, Clone)]
 pub struct List<T>(Box<[Loc<T>]>);
+
+impl<T> List<T> {
+    /// Returns a [`Location`] encompassing the whole `List`,
+    /// or `None` if the `List` is empty.
+    pub fn loc(&self) -> Option<Location> {
+        if self.0.len() == 0 { return None; }
+        Some(Location {
+            start: self.0.first().unwrap().1.start,
+            end: self.0.last().unwrap().1.end,
+        })
+    }
+}
+
+impl<T, U> From<U> for List<T> where Box<[Loc<T>]>: From<U> {
+    fn from(value: U) -> Self { Self(value.into()) }
+}
