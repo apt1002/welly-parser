@@ -1,6 +1,6 @@
 pub mod enums;
 pub mod loc;
-pub mod parse;
+pub mod stream;
 pub mod lexer;
 pub mod bracket;
 pub mod stmt;
