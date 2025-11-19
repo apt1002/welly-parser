@@ -1,7 +1,7 @@
 use std::{fmt};
 
 use super::loc::{Location, Loc, List};
-use super::stream::{Stream, IteratorStream, CharIterator};
+use super::stream::{Stream};
 use super::{enums, lexer};
 use enums::{Separator, BracketKind, Op, StmtWord};
 use lexer::{Lexeme};
@@ -73,8 +73,8 @@ pub enum Stmt {
 
 impl Stmt {
     /// Returns a [`Location`] encompassing the entire `Stmt`.
-    pub fn loc(stmt: &Stmt) -> Location {
-        match stmt {
+    pub fn loc(&self) -> Location {
+        match self {
             Stmt::Separator(separator) => separator.1,
             Stmt::Expr(expr) => expr.loc().expect("Empty List<Expr>"),
             Stmt::Assign(pattern, op, expr) => Location {
@@ -148,16 +148,4 @@ pub fn parse_expr(input: &mut impl Stream<Item=Loc<Lexeme>>)
 pub fn parse_expr_list(input: &mut impl Stream<Item=Loc<Lexeme>>)
 -> Result<ExprList, Option<Loc<StmtError>>> {
     todo!()
-}
-
-#[derive(Default)]
-pub struct Parser(lexer::Lexer);
-
-impl Parser {
-    pub fn parse(&self, source_code: &str, start_pos: usize)
-    -> Result<Doc<Stmt>, Option<Loc<StmtError>>> {
-        let char_stream = IteratorStream::from(CharIterator::new(source_code, start_pos));
-        let lexeme_stream = IteratorStream::from(self.0.parse_all(char_stream));
-        parse_doc_stmt(&mut lexeme_stream)
-    }
 }

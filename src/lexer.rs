@@ -137,6 +137,9 @@ impl Default for Lexer {
 }
 
 impl Lexer {
+    /// Parse a hexadecimal escape sequence, starting at the hexadecimal part.
+    /// - escape - the [`Location`] of the backslash.
+    /// - num_digits - the number of hexadecimal digits required.
     fn parse_hex(&self, escape: Location, input: &mut impl Stream<Item=Loc<char>>, num_digits: usize)
     -> Result<Loc<char>, Loc<LexerError>> {
         let mut ret: u32 = 0;
@@ -157,10 +160,10 @@ impl Lexer {
     }
 
     /// Parse a single non-newline character or an escape sequence.
-    /// - if_missing - the error message if we don't receive a character.
-    /// Returns:
+    /// Returns (if possible):
     /// - the `char` value.
     /// - `true` if it was escaped.
+    /// Returns an error if there is an invalid escape sequence.
     fn parse_char(&self, input: &mut impl Stream<Item=Loc<char>>)
     -> Result<Option<(Loc<char>, bool)>, Loc<LexerError>> {
         let Some(c) = input.read() else { return Ok(None); };
@@ -186,6 +189,7 @@ impl Lexer {
         Err(Loc(MISSING_SEQUENCE, loc))?
     }
     /// Parse a character literal, starting after the initial `'`.
+    /// - quote - the [`Location`] of the initial `'`.
     fn parse_character_literal(&self, quote: Location, input: &mut impl Stream<Item=Loc<char>>)
     -> Result<Loc<Lexeme>, Option<Loc<LexerError>>> {
         let mut loc = quote;
@@ -199,6 +203,7 @@ impl Lexer {
     }
 
     /// Parse a string literal, starting after the initial `"`.
+    /// - quote - the [`Location`] of the initial `"`.
     fn parse_string_literal(&self, quote: Location, input: &mut impl Stream<Item=Loc<char>>)
     -> Result<Loc<Lexeme>, Option<Loc<LexerError>>> {
         let mut loc = quote;
@@ -213,6 +218,7 @@ impl Lexer {
     }
 
     /// Parse a line comment, starting after the initial `//`.
+    /// - slash - the [`Location`] of the initial `/`.
     fn parse_line_comment(&self, slash: Location, input: &mut impl Stream<Item=Loc<char>>)
     -> Result<Loc<Lexeme>, Option<Loc<LexerError>>> {
         let mut loc = slash;
@@ -223,7 +229,8 @@ impl Lexer {
         Ok(Loc(Lexeme::Comment(Comment), loc))
     }
 
-    /// Parse a line comment, starting after the initial `/*`. */
+    /// Parse a line comment, starting after the initial `/*`.
+    /// - slash - the [`Location`] of the initial `/`.
     fn parse_block_comment(&self, slash: Location, input: &mut impl Stream<Item=Loc<char>>)
     -> Result<Loc<Lexeme>, Option<Loc<LexerError>>> {
         let mut loc = slash;
@@ -289,35 +296,40 @@ impl Lexer {
 
     /// Parse a [`Lexeme`].
     pub fn lex(&self, input: &mut impl Stream<Item=Loc<char>>)
-    -> Result<Loc<Lexeme>, Option<Loc<LexerError>>> {
+    -> Result<Option<Loc<Lexeme>>, Option<Loc<LexerError>>> {
         let Some(c) = input.read() else { Err(None)? };
-        match c.0 {
-            '\'' => { return self.parse_character_literal(c.1, input); },
-            '\"' => { return self.parse_string_literal(c.1, input); },
-            ',' => { return Ok(Loc(Lexeme::Stmt(Stmt::Separator(Separator::Comma)), c.1)); },
-            ';' => { return Ok(Loc(Lexeme::Stmt(Stmt::Separator(Separator::Semicolon)), c.1)); },
-            '(' => { return Ok(Loc(Lexeme::Open(BracketKind::Round), c.1)); },
-            ')' => { return Ok(Loc(Lexeme::Close(BracketKind::Round), c.1)); },
-            '[' => { return Ok(Loc(Lexeme::Open(BracketKind::Square), c.1)); },
-            ']' => { return Ok(Loc(Lexeme::Close(BracketKind::Square), c.1)); },
-            '{' => { return Ok(Loc(Lexeme::Open(BracketKind::Curly), c.1)); },
-            '}' => { return Ok(Loc(Lexeme::Close(BracketKind::Curly), c.1)); },
+        Ok(Some(match c.0 {
+            // TODO: whitespace
+            '\'' => { self.parse_character_literal(c.1, input)? },
+            '\"' => { self.parse_string_literal(c.1, input)? },
+            ',' => { Loc(Lexeme::Stmt(Stmt::Separator(Separator::Comma)), c.1) },
+            ';' => { Loc(Lexeme::Stmt(Stmt::Separator(Separator::Semicolon)), c.1) },
+            '(' => { Loc(Lexeme::Open(BracketKind::Round), c.1) },
+            ')' => { Loc(Lexeme::Close(BracketKind::Round), c.1) },
+            '[' => { Loc(Lexeme::Open(BracketKind::Square), c.1) },
+            ']' => { Loc(Lexeme::Close(BracketKind::Square), c.1) },
+            '{' => { Loc(Lexeme::Open(BracketKind::Curly), c.1) },
+            '}' => { Loc(Lexeme::Close(BracketKind::Curly), c.1) },
             '/' => {
                 if let Some(c2) = input.read() {
                     match c2.0 {
-                        '/' => { return self.parse_line_comment(c2.1, input); },
-                        '*' => { return self.parse_block_comment(c2.1, input); },
-                        _ => { input.unread(c2); }
+                        '/' => { self.parse_line_comment(c2.1, input)? },
+                        '*' => { self.parse_block_comment(c2.1, input)? },
+                        _ => {
+                            input.unread(c2);
+                            self.parse_operator(c, input)?
+                        },
                     }
+                } else {
+                    self.parse_operator(c, input)?
                 }
-                return self.parse_operator(c, input);
             },
             _ => {
-                if is_operator_char(c.0) { return self.parse_operator(c, input); }
-                if is_alphanumeric_char(c.0) { return self.parse_alphanumeric(c, input); }
-                Err(Loc(ILLEGAL, c.1))?
+                if is_operator_char(c.0) { self.parse_operator(c, input)? }
+                else if is_alphanumeric_char(c.0) { self.parse_alphanumeric(c, input)? }
+                else { Err(Loc(ILLEGAL, c.1))? }
             },
-        }
+        }))
     }
 }
 
