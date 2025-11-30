@@ -1,3 +1,4 @@
+use std::{fmt};
 use std::num::{NonZeroU8};
 
 /// Distinguishes the kinds of bracket.
@@ -35,7 +36,9 @@ pub enum Separator {Comma, Semicolon}
 #[repr(u8)]
 pub enum Op {
     // TODO: `when`.
-    // TODO: `.`.
+
+    /// `structure.field` extracts the `field` component of `structure`.
+    Dot,
 
     /// `(-7) ^ 2` is `49`.
     Pow,
@@ -169,7 +172,7 @@ const fn p(n: u8) -> Option<Precedence> { Some(Precedence(NonZeroU8::new(n).unwr
 /// An [`Op`] with its binding precedences.
 ///
 ///
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct OpInfo {
     /// The `Op`.
     pub op: Op,
@@ -188,6 +191,10 @@ impl OpInfo {
     const fn infix_right(op: Op, right: u8) -> Self { Self {op, left: p(right+1), right: p(right)} }
 }
 
+impl fmt::Debug for OpInfo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.op.fmt(f) }
+}
+
 /// Describes one of Welly's operator keywords. See also [`Op`].
 ///
 /// In general, operators have two meanings. For example `-` can mean
@@ -195,7 +202,7 @@ impl OpInfo {
 /// the operator is preceded by an expression.
 ///
 /// If the operator has only one meaning, we put it in both slots.
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct OpWord {
     /// The meaning of the operator if has a left operand.
     pub with_left: OpInfo,
@@ -214,12 +221,17 @@ impl OpWord {
     pub const fn new(op: OpInfo) -> Self { Self::new_ambiguous(op, op) }
 }
 
+impl fmt::Debug for OpWord {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.with_left.fmt(f) }
+}
+
 impl PartialEq for OpWord {
     fn eq(&self, other: &Self) -> bool { self.with_left.op == other.with_left.op }
 }
 
 /// All [`OpWord`]s that exist in Welly.
-pub const ALL_OP_WORDS: [(&'static str, OpWord); 36] = [
+pub const ALL_OP_WORDS: [(&'static str, OpWord); 37] = [
+    (".", OpWord::new(OpInfo::infix_left(Op::Dot, 30))),
     ("^", OpWord::new(OpInfo::infix_right(Op::Pow, 28))),
     ("|", OpWord::new(OpInfo::infix_left(Op::Union, 26))),
     ("&", OpWord::new(OpInfo::prefix(Op::Lend, 24))),
