@@ -64,20 +64,6 @@ pub enum Expr {
     Op(OpWord),
 }
 
-/// Lexer tokens that can appear in statements but not in expressions (without
-/// being enclosed in brackets).
-#[derive(Debug, Clone)]
-pub enum Stmt {
-    /// A comma or semicolon.
-    Separator(Separator),
-
-    /// A Welly assignment operator.
-    Assign(Option<Op>),
-
-    /// A keyword that introduces a statement.
-    Word(StmtWord),
-}
-
 /// The output type of the lexer.
 #[derive(Debug, Clone)]
 pub enum Lexeme {
@@ -93,8 +79,14 @@ pub enum Lexeme {
     /// Part of an expression.
     Expr(Expr),
 
-    /// Part of a statement.
-    Stmt(Stmt),
+    /// A keyword that introduces a statement.
+    Stmt(StmtWord),
+
+    /// A Welly assignment operator.
+    Assign(Option<Op>),
+
+    /// A comma or semicolon.
+    Separator(Separator),
 
     /// An open bracket character.
     Open(BracketKind),
@@ -129,10 +121,10 @@ impl Default for Lexer {
             keywords.insert(word, Lexeme::Expr(Expr::Op(op)));
         }
         for &(word, op) in &ALL_ASSIGN_WORDS {
-            keywords.insert(word, Lexeme::Stmt(Stmt::Assign(op)));
+            keywords.insert(word, Lexeme::Assign(op));
         }
         for &(word, stmt) in &ALL_STMT_WORDS {
-            keywords.insert(word, Lexeme::Stmt(Stmt::Word(stmt)));
+            keywords.insert(word, Lexeme::Stmt(stmt));
         }
         Self {keywords}
     }
@@ -309,8 +301,8 @@ impl Lexer {
             '\t' | '\n' | '\r' | ' ' => { return Ok(None); },
             '\'' => { self.parse_character_literal(c.1, input)? },
             '\"' => { self.parse_string_literal(c.1, input)? },
-            ',' => { Loc(Lexeme::Stmt(Stmt::Separator(Separator::Comma)), c.1) },
-            ';' => { Loc(Lexeme::Stmt(Stmt::Separator(Separator::Semicolon)), c.1) },
+            ',' => { Loc(Lexeme::Separator(Separator::Comma), c.1) },
+            ';' => { Loc(Lexeme::Separator(Separator::Semicolon), c.1) },
             '(' => { Loc(Lexeme::Open(BracketKind::Round), c.1) },
             ')' => { Loc(Lexeme::Close(BracketKind::Round), c.1) },
             '[' => { Loc(Lexeme::Open(BracketKind::Square), c.1) },
