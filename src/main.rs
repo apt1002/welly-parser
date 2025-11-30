@@ -3,7 +3,7 @@ use io::{BufRead, Write};
 use ansi_term::Colour::{Red};
 
 use welly_parser::loc::{Loc};
-use welly_parser::stream::{IteratorStream, CharIterator};
+use welly_parser::stream::{Stream, IteratorStream, CharIterator};
 use welly_parser::lexer::{Lexer};
 use welly_parser::stmt::{Doc, parse_doc_stmt};
 
@@ -29,32 +29,26 @@ pub fn report(output: &mut impl Write, source: &str, msg: Loc<&str>) {
 }
 
 /// Lex, parse, and execute `source_code` starting at `start_pos`.
-/// Update `start_pos`.
+/// Update `start_pos` if successful.
 pub fn run(output: &mut impl Write, lexer: &Lexer, source_code: &str, start_pos: &mut usize)
 -> Result<(), Option<Loc<&'static str>>> {
     // Lex.
     let mut lexemes = Vec::new();
     let mut char_stream = IteratorStream::from(CharIterator::new(source_code, *start_pos));
-    while let Some(lexeme) = lexer.lex(&mut char_stream)? {
-        lexemes.push(lexeme);
+    while !char_stream.is_empty() {
+        if let Some(l) = lexer.lex(&mut char_stream)? { lexemes.push(l); }
     }
     // Parse.
     let mut stmts = Vec::new();
     let mut lexeme_stream = IteratorStream::from(lexemes.into_iter());
-    // TODO: Report errors.
-    loop {
-        match parse_doc_stmt(&mut lexeme_stream) {
-            Ok(Doc(stmt, _)) => {
-                *start_pos = stmt.loc().end;
-                stmts.push(stmt);
-            },
-            Err(None) => { break; },
-            Err(error) => { Err(error)? },
-        }
+    while !lexeme_stream.is_empty() {
+        let Doc(stmt, _) = parse_doc_stmt(&mut lexeme_stream)?;
+        stmts.push(stmt);
     }
     // let valid_stmts = stmts.into_iter().map(|stmt| stmt::validate(stmt)).collect();
     for stmt in stmts {
         let loc = stmt.loc();
+        *start_pos = loc.end;
         // Ignore IO errors.
         let _ = writeln!(output, "Parsed '{}' into {:#?}",
             &source_code[loc.start..loc.end],

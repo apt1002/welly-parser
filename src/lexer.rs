@@ -81,9 +81,11 @@ pub enum Stmt {
 /// The output type of the lexer.
 #[derive(Debug, Clone)]
 pub enum Lexeme {
+    /*
     /// An indentation string: a maximal string of spaces starting at the
     /// beginning of a line.
     Indent(usize),
+    */
 
     // A comment.
     Comment(Comment),
@@ -295,11 +297,16 @@ impl Lexer {
     }
 
     /// Parse a [`Lexeme`].
+    /// Returns:
+    /// - Ok(None) - discard some input (e.g. whitespace).
+    /// - Ok(Some(l)) - found a [`Lexeme`] `l`.
+    /// - Err(None) - stream is empty.
+    /// - Err(Some(e)) - found an error `e`.
     pub fn lex(&self, input: &mut impl Stream<Item=Loc<char>>)
     -> Result<Option<Loc<Lexeme>>, Option<Loc<LexerError>>> {
         let Some(c) = input.read() else { Err(None)? };
         Ok(Some(match c.0 {
-            // TODO: whitespace
+            '\t' | '\n' | '\r' | ' ' => { return Ok(None); },
             '\'' => { self.parse_character_literal(c.1, input)? },
             '\"' => { self.parse_string_literal(c.1, input)? },
             ',' => { Loc(Lexeme::Stmt(Stmt::Separator(Separator::Comma)), c.1) },
