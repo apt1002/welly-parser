@@ -29,6 +29,9 @@ pub struct Loc<T>(pub T, pub Location);
 impl<T> Loc<T> {
     /// Convert an `&Loc<T>` to a `Loc<&T>`.
     pub fn as_ref(&self) -> Loc<&T> { Loc(&self.0, self.1) }
+
+    /// Apply `f` to the `T`.
+    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Loc<U> { Loc(f(self.0), self.1) }
 }
 
 impl<T: fmt::Debug> fmt::Debug for Loc<T> {
@@ -41,7 +44,7 @@ impl<T: fmt::Debug> fmt::Debug for Loc<T> {
 // ----------------------------------------------------------------------------
 
 /// A list of [`Loc<T>`]s.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct List<T>(Box<[Loc<T>]>);
 
 impl<T> List<T> {
@@ -54,6 +57,10 @@ impl<T> List<T> {
             end: self.0.last().unwrap().1.end,
         })
     }
+}
+
+impl<T: fmt::Debug> fmt::Debug for List<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.0.fmt(f) }
 }
 
 impl<T, U> From<U> for List<T> where Box<[Loc<T>]>: From<U> {
