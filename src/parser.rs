@@ -145,6 +145,13 @@ pub fn parse_item(input: &mut impl Stream<Item=Loc<Lexeme>>)
                 },
             }
         },
+        Lexeme::Assign(op) => {
+            // Guess that `lhs` is missing.
+            let lhs = List::from([]);
+            let op = Loc(*op, l.1);
+            let rhs = parse_formula(input)?;
+            Item::Assign(lhs, op, rhs)
+        },
         Lexeme::Separator(sep) => { Item::Separator(Loc(*sep, l.1)) },
         _ => { Err(Loc(MISSING_ITEM, l.1))? },
     })
