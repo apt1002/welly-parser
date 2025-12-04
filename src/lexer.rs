@@ -40,10 +40,9 @@ fn hex_digit_value(c: char) -> Option<u32> {
 #[derive(Debug, Copy, Clone)]
 pub struct Comment;
 
-/// Lexer tokens that can appear in expressions (without being enclosed in
-/// brackets).
+/// Lexer tokens that are complete expressions.
 #[derive(Debug, Clone)]
-pub enum Expr {
+pub enum Atom {
     /// A Welly character literal.
     ///
     /// A character literal consists of a single character or escape sequence
@@ -59,9 +58,6 @@ pub enum Expr {
     /// A Welly identifier, tag or number: a maximal word made of letters,
     /// digits and underscores.
     Alphanumeric(Rc<str>),
-
-    /// A Welly operator or constant.
-    Op(OpWord),
 }
 
 /// The output type of the lexer.
@@ -77,12 +73,15 @@ pub enum Lexeme {
     Comment(Comment),
 
     /// Part of an expression.
-    Expr(Expr),
+    Atom(Atom),
 
     /// A keyword that introduces a statement.
     Stmt(StmtWord),
 
-    /// A Welly assignment operator.
+    /// A keyword that is an arithmetic operator or constant.
+    Op(OpWord),
+
+    /// A keyword that is an assignment operator.
     Assign(Option<Op>),
 
     /// A comma or semicolon.
@@ -118,7 +117,7 @@ impl Default for Lexer {
     fn default() -> Self {
         let mut keywords = HashMap::new();
         for &(word, op) in &ALL_OP_WORDS {
-            keywords.insert(word, Lexeme::Expr(Expr::Op(op)));
+            keywords.insert(word, Lexeme::Op(op));
         }
         for &(word, op) in &ALL_ASSIGN_WORDS {
             keywords.insert(word, Lexeme::Assign(op));
@@ -193,7 +192,7 @@ impl Lexer {
         let Some(c2) = input.read() else { Err(Loc(UNTERMINATED_CHAR, loc))? };
         if c2.0 != '\'' { input.unread(c2); Err(Loc(UNTERMINATED_CHAR, loc))? }
         loc.end = c2.1.end;
-        Ok(Loc(Lexeme::Expr(Expr::CharacterLiteral(c.0)), loc))
+        Ok(Loc(Lexeme::Atom(Atom::CharacterLiteral(c.0)), loc))
     }
 
     /// Parse a string literal, starting after the initial `"`.
@@ -208,7 +207,7 @@ impl Lexer {
             if c.0 == '"' && !is_escaped { break; }
             s.push(c.0);
         }
-        Ok(Loc(Lexeme::Expr(Expr::StringLiteral(s.into())), loc))
+        Ok(Loc(Lexeme::Atom(Atom::StringLiteral(s.into())), loc))
     }
 
     /// Parse a line comment, starting after the initial `//`.
@@ -284,7 +283,7 @@ impl Lexer {
         if let Some(ret) = self.keywords.get(buffer.as_str()) {
             Ok(Loc(ret.clone(), loc))
         } else {
-            Ok(Loc(Lexeme::Expr(Expr::Alphanumeric(buffer.into())), loc))
+            Ok(Loc(Lexeme::Atom(Atom::Alphanumeric(buffer.into())), loc))
         }
     }
 

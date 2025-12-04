@@ -3,8 +3,8 @@ use std::{fmt};
 use super::loc::{Location, Loc, List};
 use super::stream::{Stream};
 use super::{enums, lexer};
-use enums::{Separator, BracketKind, Op, StmtWord};
-use lexer::{Lexeme};
+use enums::{Separator, BracketKind, Op, OpWord, StmtWord};
+use lexer::{Comment, Atom, Lexeme};
 
 pub const MISSING_STMT: &'static str = "Expected a statement";
 pub const MISMATCHED_BRACKET: &'static str = "Mismatched bracket";
@@ -13,7 +13,7 @@ pub const MISMATCHED_BRACKET: &'static str = "Mismatched bracket";
 
 /// A `T` and its documentation.
 #[derive(Clone)]
-pub struct Doc<T>(pub T, pub List<lexer::Comment>);
+pub struct Doc<T>(pub T, pub List<Comment>);
 
 impl<T: fmt::Debug> fmt::Debug for Doc<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.0.fmt(f) }
@@ -24,8 +24,11 @@ impl<T: fmt::Debug> fmt::Debug for Doc<T> {
 /// Part of an expression. An expression is a [`List<Expr>`].
 #[derive(Debug, Clone)]
 pub enum Expr {
-    /// Part of an expression that isn't in brackets.
-    Expr(lexer::Expr),
+    /// A lexeme that is an expression on its own.
+    Atom(Atom),
+
+    /// An arithmetic operator or keyword constant.
+    Op(OpWord),
 
     /// Something enclosed in round brackets.
     Round(Bracket),
@@ -110,7 +113,7 @@ pub fn parse_stmt(input: &mut impl Stream<Item=Loc<Lexeme>>)
 -> Result<Stmt, Option<Loc<StmtError>>> {
     let Some(l) = input.read() else { Err(None)? };
     Ok(match &l.0 {
-        Lexeme::Expr(_) | Lexeme::Open(BracketKind::Round) | Lexeme::Open(BracketKind::Square) => {
+        Lexeme::Atom(_) | Lexeme::Op(_) | Lexeme::Open(BracketKind::Round) | Lexeme::Open(BracketKind::Square) => {
             input.unread(l);
             let lhs = parse_expr(input)?;
             let Some(l) = input.read() else { Err(None)? };
@@ -153,8 +156,11 @@ pub fn parse_expr(input: &mut impl Stream<Item=Loc<Lexeme>>)
     loop {
         let Some(l) = input.read() else { Err(None)? };
         exprs.push(match &l.0 {
-            Lexeme::Expr(expr) => {
-                Loc(Expr::Expr(expr.clone()), l.1)
+            Lexeme::Atom(atom) => {
+                Loc(Expr::Atom(atom.clone()), l.1)
+            },
+            Lexeme::Op(op) => {
+                Loc(Expr::Op(*op), l.1)
             },
             Lexeme::Open(BracketKind::Round) => {
                 parse_bracket(Loc(BracketKind::Round, l.1), input)?.map(Expr::Round)
