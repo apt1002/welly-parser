@@ -153,26 +153,33 @@ pub fn parse_item(input: &mut impl Stream<Item=Loc<Lexeme>>)
 /// Parse a possibly-empty [`Formula`].
 pub fn parse_formula(input: &mut impl Stream<Item=Loc<Lexeme>>)
 -> Result<Formula, Option<Loc<ItemError>>> {
-    let mut exprs = Vec::new();
-    loop {
-        let Some(l) = input.read() else { Err(None)? };
-        exprs.push(match &l.0 {
-            Lexeme::Atom(atom) => {
-                Loc(Noun::Atom(atom.clone()), l.1)
-            },
-            Lexeme::Op(op) => {
-                Loc(Noun::Op(*op), l.1)
-            },
-            Lexeme::Open(BracketKind::Round) => {
-                parse_bracket(Loc(BracketKind::Round, l.1), input)?.map(Noun::Round)
-            },
-            Lexeme::Open(BracketKind::Square) => {
-                parse_bracket(Loc(BracketKind::Square, l.1), input)?.map(Noun::Square)
-            },
-            _ => { input.unread(l); break; },
-        });
-    }
-    Ok(List::from(exprs))
+    let mut nouns = Vec::new();
+    while let Some(noun) = parse_noun(input)? { nouns.push(noun); }
+    Ok(List::from(nouns))
+}
+
+/// Parse a [`Noun`] if possible.
+pub fn parse_noun(input: &mut impl Stream<Item=Loc<Lexeme>>)
+-> Result<Option<Loc<Noun>>, Option<Loc<ItemError>>> {
+    let Some(l) = input.read() else { Err(None)? };
+    Ok(Some(match &l.0 {
+        Lexeme::Atom(atom) => {
+            Loc(Noun::Atom(atom.clone()), l.1)
+        },
+        Lexeme::Op(op) => {
+            Loc(Noun::Op(*op), l.1)
+        },
+        Lexeme::Open(BracketKind::Round) => {
+            parse_bracket(Loc(BracketKind::Round, l.1), input)?.map(Noun::Round)
+        },
+        Lexeme::Open(BracketKind::Square) => {
+            parse_bracket(Loc(BracketKind::Square, l.1), input)?.map(Noun::Square)
+        },
+        _ => {
+            input.unread(l);
+            return Ok(None);
+        },
+    }))
 }
 
 /// Parse a [`Bracket`] starting after the open bracket.
