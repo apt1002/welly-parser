@@ -5,7 +5,7 @@ use std::rc::{Rc};
 
 use super::loc::{Location, Loc};
 use super::stream::{Stream};
-use super::enums::{BracketKind, Separator, Op, OpWord, ALL_OP_WORDS, ALL_ASSIGN_WORDS, StmtWord, ALL_STMT_WORDS};
+use super::enums::{BracketKind, Separator, Op, OpWord, ALL_OP_WORDS, ALL_ASSIGN_WORDS, ItemWord, ALL_ITEM_WORDS};
 
 pub const UNTERMINATED_BLOCK_COMMENT: &'static str = "Unterminated block comment";
 pub const UNTERMINATED_STRING: &'static str = "Unterminated string";
@@ -76,7 +76,7 @@ pub enum Lexeme {
     Atom(Atom),
 
     /// A keyword that introduces a statement.
-    Stmt(StmtWord),
+    Item(ItemWord),
 
     /// A keyword that is an arithmetic operator or constant.
     Op(OpWord),
@@ -122,8 +122,8 @@ impl Default for Lexer {
         for &(word, op) in &ALL_ASSIGN_WORDS {
             keywords.insert(word, Lexeme::Assign(op));
         }
-        for &(word, stmt) in &ALL_STMT_WORDS {
-            keywords.insert(word, Lexeme::Stmt(stmt));
+        for &(word, item) in &ALL_ITEM_WORDS {
+            keywords.insert(word, Lexeme::Item(item));
         }
         Self {keywords}
     }

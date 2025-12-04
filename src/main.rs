@@ -5,7 +5,7 @@ use ansi_term::Colour::{Red};
 use welly_parser::loc::{Loc};
 use welly_parser::stream::{Stream, IteratorStream, CharIterator};
 use welly_parser::lexer::{Lexer};
-use welly_parser::stmt::{Doc, parse_doc_stmt};
+use welly_parser::parser::{Doc, parse_doc_item};
 
 fn main() -> std::io::Result<()> {
     let mut stdin = io::stdin().lock();
@@ -39,20 +39,20 @@ pub fn run(output: &mut impl Write, lexer: &Lexer, source_code: &str, start_pos:
         if let Some(l) = lexer.lex(&mut char_stream)? { lexemes.push(l); }
     }
     // Parse.
-    let mut stmts = Vec::new();
+    let mut items = Vec::new();
     let mut lexeme_stream = IteratorStream::from(lexemes.into_iter());
     while !lexeme_stream.is_empty() {
-        let Doc(stmt, _) = parse_doc_stmt(&mut lexeme_stream)?;
-        stmts.push(stmt);
+        let Doc(item, _) = parse_doc_item(&mut lexeme_stream)?;
+        items.push(item);
     }
-    // let valid_stmts = stmts.into_iter().map(|stmt| stmt::validate(stmt)).collect();
-    for stmt in stmts {
-        let loc = stmt.loc();
+    // let valid_items = items.into_iter().map(|item| item::validate(item)).collect();
+    for item in items {
+        let loc = item.loc();
         *start_pos = loc.end;
         // Ignore IO errors.
         let _ = writeln!(output, "Parsed '{}' into {:#?}",
             &source_code[loc.start..loc.end],
-            stmt,
+            item,
         );
     }
     Ok(())

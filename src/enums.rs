@@ -290,9 +290,10 @@ pub const ALL_ASSIGN_WORDS: [(&'static str, Option<Op>); 12] = [
 
 // ----------------------------------------------------------------------------
 
+/// A keyword that introduces an item.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u8)]
-pub enum StmtWord {
+pub enum ItemWord {
     /// `mod name;` defines a module from a source file.
     ///
     /// `mod name { ... }` defines a module inline.
@@ -316,11 +317,11 @@ pub enum StmtWord {
     /// `return expr;` returns the value of the expression to the caller.
     Return,
 
-    /// `match <expr>;` jumps down to the next `case` whose pattern matches the
+    /// `match expr;` jumps down to the next `case` whose pattern matches the
     /// value of `expr`.
     Match,
 
-    /// `case <pattern> { ... }` intercepts earlier `match`es whose expression
+    /// `case pattern { ... }` intercepts earlier `match`es whose expression
     /// has a value that matches `pattern`. The names in the pattern are bound
     /// to the fields of the value, then the block is executed.
     Case,
@@ -346,21 +347,21 @@ pub enum StmtWord {
     Else,
 }
 
-/// All [`OpWord`]s that exist in Welly.
-pub const ALL_STMT_WORDS: [(&'static str, StmtWord); 13] = [
-    ("mod", StmtWord::Module),
-    ("obj", StmtWord::Object),
-    ("fn", StmtWord::Function),
-    ("macro", StmtWord::Macro),
-    ("trait", StmtWord::Trait),
-    ("impl", StmtWord::Implementation),
-    ("return", StmtWord::Return),
-    ("match", StmtWord::Match),
-    ("case", StmtWord::Case),
-    ("if", StmtWord::If),
-    ("while", StmtWord::While),
-    ("for", StmtWord::For),
-    ("else", StmtWord::Else),
+/// All [`ItemWord`]s that exist in Welly.
+pub const ALL_ITEM_WORDS: [(&'static str, ItemWord); 13] = [
+    ("mod", ItemWord::Module),
+    ("obj", ItemWord::Object),
+    ("fn", ItemWord::Function),
+    ("macro", ItemWord::Macro),
+    ("trait", ItemWord::Trait),
+    ("impl", ItemWord::Implementation),
+    ("return", ItemWord::Return),
+    ("match", ItemWord::Match),
+    ("case", ItemWord::Case),
+    ("if", ItemWord::If),
+    ("while", ItemWord::While),
+    ("for", ItemWord::For),
+    ("else", ItemWord::Else),
 ];
 
 // ----------------------------------------------------------------------------
