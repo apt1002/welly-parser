@@ -22,6 +22,8 @@ impl<T: fmt::Debug> fmt::Debug for Doc<T> {
 // ----------------------------------------------------------------------------
 
 /// Part of a [`Formula`].
+///
+/// `Noun`s are generally wrapped in `Loc`.
 #[derive(Debug, Clone)]
 pub enum Noun {
     /// A lexeme that is an expression on its own.
@@ -43,7 +45,9 @@ type Formula = List<Noun>;
 // ----------------------------------------------------------------------------
 
 /// The top-level non-terminal in a source file, at the REPL, or inside a
-/// bracket is [`Doc<Item>`].
+/// bracket.
+///
+/// `Item`s are generally wrapped in [`Doc`].
 #[derive(Debug, Clone)]
 pub enum Item {
     /// A comma or semicolon.
@@ -64,6 +68,9 @@ pub enum Item {
     ///
     /// The meaning depends on the keyword. See [`ItemWord`].
     Control(Loc<ItemWord>, Formula, Loc<Bracket>),
+
+    /// Something enclosed in curly brackets.
+    Block(Loc<Bracket>)
 }
 
 impl Item {
@@ -84,6 +91,7 @@ impl Item {
                 start: word.1.start,
                 end: block.1.end,
             },
+            Item::Block(block) => block.1,
         }
     }
 }
@@ -151,6 +159,10 @@ pub fn parse_item(input: &mut impl Stream<Item=Loc<Lexeme>>)
             let op = Loc(*op, l.1);
             let rhs = parse_formula(input)?;
             Item::Assign(lhs, op, rhs)
+        },
+        Lexeme::Open(BracketKind::Curly) => {
+            let block = parse_bracket(Loc(BracketKind::Curly, l.1), input)?;
+            Item::Block(block)
         },
         Lexeme::Separator(sep) => { Item::Separator(Loc(*sep, l.1)) },
         _ => { Err(Loc(MISSING_ITEM, l.1))? },
