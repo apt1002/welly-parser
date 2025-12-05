@@ -6,6 +6,7 @@ use super::{enums, lexer};
 use enums::{Separator, BracketKind as BK, Op, Precedence, OpInfo, ItemWord};
 use lexer::{Comment, Atom, Lexeme};
 
+/// The error type of the `parse_xxx()` functions.
 type ParserError = &'static str;
 
 pub const MISSING_ITEM: ParserError = "Expected an item";
@@ -19,6 +20,22 @@ pub const MISSING_OP: ParserError = "Missing operator before this formula";
 /// A `T` and its documentation.
 #[derive(Clone)]
 pub struct Doc<T>(pub T, pub List<Comment>);
+
+impl Doc<Item> {
+    /// Parse a [`Item`] preceded by zero or more [`Comment`]s.
+    pub fn parse(input: &mut impl Stream<Item=Loc<Lexeme>>)
+    -> Result<Self, Option<Loc<ParserError>>> {
+        let mut docs = Vec::new();
+        loop {
+            let Some(l) = input.read() else { Err(None)? };
+            match &l.0 {
+                Lexeme::Comment(comment) => { docs.push(Loc(comment.clone(), l.1)); },
+                _ => { input.unread(l); break; },
+            }
+        }
+        Ok(Self(Item::parse(input)?, docs.into()))
+    }
+}
 
 impl<T: fmt::Debug> fmt::Debug for Doc<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.0.fmt(f) }
@@ -49,33 +66,102 @@ pub enum Formula {
 }
 
 impl Formula {
-    /// Returns a [`Location`] spanning this whole `Formula`.
+    /// Returns a [`Location`] spanning `Self`.
     pub fn loc(&self) -> Location { Location {start: self.loc_start(), end: self.loc_end()} }
 
     /// Used to compute `self.loc().start`.
     pub fn loc_start(&self) -> usize {
         match self {
-            Formula::Atom(l) => l.1.start,
-            Formula::RoundGroup(l) => l.1.start,
-            Formula::SquareGroup(l) => l.1.start,
-            Formula::Op(Some(left), _, _) => left.loc_start(),
-            Formula::Op(None, l, _) => l.1.start,
-            Formula::RoundCall(left, _) => left.loc_start(),
-            Formula::SquareCall(left, _) => left.loc_start(),
+            Self::Atom(l) => l.1.start,
+            Self::RoundGroup(l) => l.1.start,
+            Self::SquareGroup(l) => l.1.start,
+            Self::Op(Some(left), _, _) => left.loc_start(),
+            Self::Op(None, l, _) => l.1.start,
+            Self::RoundCall(left, _) => left.loc_start(),
+            Self::SquareCall(left, _) => left.loc_start(),
         }
     }
 
     /// Used to compute `self.loc().end`.
     pub fn loc_end(&self) -> usize {
         match self {
-            Formula::Atom(l) => l.1.end,
-            Formula::RoundGroup(l) => l.1.end,
-            Formula::SquareGroup(l) => l.1.end,
-            Formula::Op(_, _, Some(right)) => right.loc_end(),
-            Formula::Op(_, l, None) => l.1.end,
-            Formula::RoundCall(_, l) => l.1.end,
-            Formula::SquareCall(_, l) => l.1.end,
+            Self::Atom(l) => l.1.end,
+            Self::RoundGroup(l) => l.1.end,
+            Self::SquareGroup(l) => l.1.end,
+            Self::Op(_, _, Some(right)) => right.loc_end(),
+            Self::Op(_, l, None) => l.1.end,
+            Self::RoundCall(_, l) => l.1.end,
+            Self::SquareCall(_, l) => l.1.end,
         }
+    }
+
+    /// Parse an optional [`Self`] containing operators whose left
+    /// [`Precedence`] exceeds `limit`.
+    ///
+    /// Use `Precedence::MIN` for `limit` to parse a complete `Self`.
+    pub fn parse(limit: Precedence, input: &mut impl Stream<Item=Loc<Lexeme>>)
+    -> Result<Option<Self>, Option<Loc<ParserError>>> {
+        // Parse an initial [`Self`].
+        let Some(l) = input.read() else { Err(None)? };
+        let mut ret = match &l.0 {
+            Lexeme::Atom(atom) => Self::Atom(Loc(atom.clone(), l.1)),
+            Lexeme::Op(op_word) => {
+                let OpInfo {op, left, right} = op_word.without_left;
+                if let Some(left) = left {
+                    if limit >= left {
+                        input.unread(l);
+                        return Ok(None);
+                    }
+                    Err(Loc(MISSING_LEFT, l.1))?
+                } else {
+                    Self::parse_operand(None, Loc(op, l.1), right, input)?
+                }
+            },
+            Lexeme::Open(BK::Round) => Self::RoundGroup(parse_bracket(Loc(BK::Round, l.1), input)?),
+            Lexeme::Open(BK::Square) => Self::SquareGroup(parse_bracket(Loc(BK::Square, l.1), input)?),
+            _ => {
+                input.unread(l);
+                return Ok(None);
+            },
+        };
+        // Parse operators whose [`Precedence`] exceeds `limit`, and their
+        // operands.
+        loop {
+            let Some(l) = input.read() else { Err(None)? };
+            ret = match &l.0 {
+                Lexeme::Atom(_) => { Err(Loc(MISSING_OP, l.1))? },
+                Lexeme::Op(op_word) => {
+                    let OpInfo {op, left, right} = op_word.with_left;
+                    if let Some(left) = left {
+                        if limit >= left {
+                            input.unread(l);
+                            return Ok(Some(ret));
+                        }
+                        Self::parse_operand(Some(ret), Loc(op, l.1), right, input)?
+                    } else {
+                        Err(Loc(MISSING_OP, l.1))?
+                    }
+                },
+                Lexeme::Open(BK::Round) => Self::RoundCall(Box::new(ret), parse_bracket(Loc(BK::Round, l.1), input)?),
+                Lexeme::Open(BK::Square) => Self::SquareCall(Box::new(ret), parse_bracket(Loc(BK::Square, l.1), input)?),
+                _ => {
+                    input.unread(l);
+                    return Ok(Some(ret));
+                },
+            };
+        }
+    }
+
+    /// Given an optional left operand, an operator, and its right
+    /// [`Precedence`] (if any) Parse the right operand (if any).
+    fn parse_operand(left: Option<Self>, op: Loc<Op>, right: Option<Precedence>, input: &mut impl Stream<Item=Loc<Lexeme>>)
+    -> Result<Self, Option<Loc<ParserError>>> {
+        let right = if let Some(right) = right {
+            Some(Self::parse(right, input)?.ok_or(Loc(MISSING_RIGHT, op.1))?)
+        } else {
+            None
+        };
+        Ok(Self::Op(left.map(Box::new), op, right.map(Box::new)))
     }
 }
 
@@ -111,154 +197,72 @@ pub enum Item {
 }
 
 impl Item {
-    /// Returns a [`Location`] encompassing the entire `Item`.
+    /// Returns a [`Location`] encompassing `Self`.
     pub fn loc(&self) -> Location {
         match self {
-            Item::Separator(separator) => separator.1,
-            Item::Eval(expr) => expr.loc(),
-            Item::Assign(Some(pattern), _, Some(expr)) => Location {start: pattern.loc_start(), end: expr.loc_end()},
-            Item::Assign(Some(pattern), op, None) => Location {start: pattern.loc_start(), end: op.1.end},
-            Item::Assign(None, op, Some(expr)) => Location {start: op.1.start, end: expr.loc_end()},
-            Item::Assign(None, op, None) => op.1,
-            Item::Verb(word, Some(expr)) => Location {start: word.1.start, end: expr.loc_end()},
-            Item::Verb(word, None) => word.1,
-            Item::Control(word, _expr, block) => Location {start: word.1.start, end: block.1.end},
-            Item::Block(block) => block.1,
+            Self::Separator(separator) => separator.1,
+            Self::Eval(expr) => expr.loc(),
+            Self::Assign(Some(pattern), _, Some(expr)) => Location {start: pattern.loc_start(), end: expr.loc_end()},
+            Self::Assign(Some(pattern), op, None) => Location {start: pattern.loc_start(), end: op.1.end},
+            Self::Assign(None, op, Some(expr)) => Location {start: op.1.start, end: expr.loc_end()},
+            Self::Assign(None, op, None) => op.1,
+            Self::Verb(word, Some(expr)) => Location {start: word.1.start, end: expr.loc_end()},
+            Self::Verb(word, None) => word.1,
+            Self::Control(word, _expr, block) => Location {start: word.1.start, end: block.1.end},
+            Self::Block(block) => block.1,
         }
     }
-}
 
-/// Represents a sequence of [`Item`] inside brackets.
-type Bracket = Box<[Doc<Item>]>;
+    /// Parse a [`Self`].
+    pub fn parse(input: &mut impl Stream<Item=Loc<Lexeme>>)
+    -> Result<Self, Option<Loc<ParserError>>> {
+        let Some(l) = input.read() else { Err(None)? };
+        Ok(match &l.0 {
+            Lexeme::Atom(_) | Lexeme::Op(_) | Lexeme::Open(BK::Round) | Lexeme::Open(BK::Square) | Lexeme::Assign(_) => {
+                input.unread(l);
+                let lhs = Formula::parse(Precedence::MIN, input)?;
+                let Some(l) = input.read() else { Err(None)? };
+                match &l.0 {
+                    Lexeme::Assign(op) => {
+                        let op = Loc(*op, l.1);
+                        let rhs = Formula::parse(Precedence::MIN, input)?;
+                        Self::Assign(lhs, op, rhs)
+                    },
+                    _ => {
+                        input.unread(l);
+                        Self::Eval(lhs.expect("We checked the first Lexeme"))
+                    },
+                }
+            },
+            Lexeme::Item(word) => {
+                let word = Loc(*word, l.1);
+                let expr = Formula::parse(Precedence::MIN, input)?;
+                let Some(l) = input.read() else { Err(None)? };
+                match &l.0 {
+                    Lexeme::Open(BK::Curly) => {
+                        let block = parse_bracket(Loc(BK::Curly, l.1), input)?;
+                        Self::Control(word, expr, block)
+                    },
+                    _ => {
+                        input.unread(l);
+                        Self::Verb(word, expr)
+                    },
+                }
+            },
+            Lexeme::Open(BK::Curly) => {
+                let block = parse_bracket(Loc(BK::Curly, l.1), input)?;
+                Self::Block(block)
+            },
+            Lexeme::Separator(sep) => { Self::Separator(Loc(*sep, l.1)) },
+            _ => { Err(Loc(MISSING_ITEM, l.1))? },
+        })
+    }
+}
 
 // ----------------------------------------------------------------------------
 
-/// Parse an [`Item`] preceded by zero or more [`Comment`]s.
-pub fn parse_doc_item(input: &mut impl Stream<Item=Loc<Lexeme>>)
--> Result<Doc<Item>, Option<Loc<ParserError>>> {
-    let mut docs = Vec::new();
-    loop {
-        let Some(l) = input.read() else { Err(None)? };
-        match &l.0 {
-            Lexeme::Comment(comment) => { docs.push(Loc(comment.clone(), l.1)); },
-            _ => { input.unread(l); break; },
-        }
-    }
-    Ok(Doc(parse_item(input)?, docs.into()))
-}
-
-/// Parse an [`Item`].
-pub fn parse_item(input: &mut impl Stream<Item=Loc<Lexeme>>)
--> Result<Item, Option<Loc<ParserError>>> {
-    let Some(l) = input.read() else { Err(None)? };
-    Ok(match &l.0 {
-        Lexeme::Atom(_) | Lexeme::Op(_) | Lexeme::Open(BK::Round) | Lexeme::Open(BK::Square) | Lexeme::Assign(_) => {
-            input.unread(l);
-            let lhs = parse_formula(Precedence::MIN, input)?;
-            let Some(l) = input.read() else { Err(None)? };
-            match &l.0 {
-                Lexeme::Assign(op) => {
-                    let op = Loc(*op, l.1);
-                    let rhs = parse_formula(Precedence::MIN, input)?;
-                    Item::Assign(lhs, op, rhs)
-                },
-                _ => {
-                    input.unread(l);
-                    Item::Eval(lhs.expect("We checked the first Lexeme"))
-                },
-            }
-        },
-        Lexeme::Item(word) => {
-            let word = Loc(*word, l.1);
-            let expr = parse_formula(Precedence::MIN, input)?;
-            let Some(l) = input.read() else { Err(None)? };
-            match &l.0 {
-                Lexeme::Open(BK::Curly) => {
-                    let block = parse_bracket(Loc(BK::Curly, l.1), input)?;
-                    Item::Control(word, expr, block)
-                },
-                _ => {
-                    input.unread(l);
-                    Item::Verb(word, expr)
-                },
-            }
-        },
-        Lexeme::Open(BK::Curly) => {
-            let block = parse_bracket(Loc(BK::Curly, l.1), input)?;
-            Item::Block(block)
-        },
-        Lexeme::Separator(sep) => { Item::Separator(Loc(*sep, l.1)) },
-        _ => { Err(Loc(MISSING_ITEM, l.1))? },
-    })
-}
-
-/// Parse an optional [`Formula`] containing operators whose left
-/// [`Precedence`] exceeds `limit`.
-///
-/// Use `Precedence::MIN` for `limit` to parse a complete `Formula`.
-fn parse_formula(limit: Precedence, input: &mut impl Stream<Item=Loc<Lexeme>>)
--> Result<Option<Formula>, Option<Loc<ParserError>>> {
-    // Parse an initial [`Formula`].
-    let Some(l) = input.read() else { Err(None)? };
-    let mut formula = match &l.0 {
-        Lexeme::Atom(atom) => Formula::Atom(Loc(atom.clone(), l.1)),
-        Lexeme::Op(op_word) => {
-            let OpInfo {op, left, right} = op_word.without_left;
-            if let Some(left) = left {
-                if limit >= left {
-                    input.unread(l);
-                    return Ok(None);
-                }
-                Err(Loc(MISSING_LEFT, l.1))?
-            } else {
-                parse_operand(None, Loc(op, l.1), right, input)?
-            }
-        },
-        Lexeme::Open(BK::Round) => Formula::RoundGroup(parse_bracket(Loc(BK::Round, l.1), input)?),
-        Lexeme::Open(BK::Square) => Formula::SquareGroup(parse_bracket(Loc(BK::Square, l.1), input)?),
-        _ => {
-            input.unread(l);
-            return Ok(None);
-        },
-    };
-    // Parse operators whose [`Precedence`] exceeds `limit` and their operands.
-    loop {
-        let Some(l) = input.read() else { Err(None)? };
-        formula = match &l.0 {
-            Lexeme::Atom(_) => { Err(Loc(MISSING_OP, l.1))? },
-            Lexeme::Op(op_word) => {
-                let OpInfo {op, left, right} = op_word.with_left;
-                if let Some(left) = left {
-                    if limit >= left {
-                        input.unread(l);
-                        return Ok(Some(formula));
-                    }
-                    parse_operand(Some(formula), Loc(op, l.1), right, input)?
-                } else {
-                    Err(Loc(MISSING_OP, l.1))?
-                }
-            },
-            Lexeme::Open(BK::Round) => Formula::RoundCall(Box::new(formula), parse_bracket(Loc(BK::Round, l.1), input)?),
-            Lexeme::Open(BK::Square) => Formula::SquareCall(Box::new(formula), parse_bracket(Loc(BK::Square, l.1), input)?),
-            _ => {
-                input.unread(l);
-                return Ok(Some(formula));
-            },
-        };
-    }
-}
-
-/// Given an optional left operand, an operator, and its right [`Precedence`]
-/// (if any) Parse the right operand (if any).
-fn parse_operand(left: Option<Formula>, op: Loc<Op>, right: Option<Precedence>, input: &mut impl Stream<Item=Loc<Lexeme>>)
--> Result<Formula, Option<Loc<ParserError>>> {
-    let right = if let Some(right) = right {
-        Some(parse_formula(right, input)?.ok_or(Loc(MISSING_RIGHT, op.1))?)
-    } else {
-        None
-    };
-    Ok(Formula::Op(left.map(Box::new), op, right.map(Box::new)))
-}
+/// Represents a sequence of [`Item`] inside brackets.
+type Bracket = Box<[Doc<Item>]>;
 
 /// Parse a [`Bracket`] starting after the open bracket.
 /// - open - the open bracket.
@@ -280,6 +284,6 @@ pub fn parse_bracket(open: Loc<BK>, input: &mut impl Stream<Item=Loc<Lexeme>>)
             _ => {},
         }
         input.unread(l);
-        contents.push(parse_doc_item(input)?);
+        contents.push(Doc::parse(input)?);
     }
 }

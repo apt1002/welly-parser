@@ -5,7 +5,7 @@ use ansi_term::Colour::{Red};
 use welly_parser::loc::{Loc};
 use welly_parser::stream::{Stream, IteratorStream, CharIterator};
 use welly_parser::lexer::{Lexer};
-use welly_parser::parser::{Doc, parse_doc_item};
+use welly_parser::parser::{Doc};
 
 fn main() -> std::io::Result<()> {
     let mut stdin = io::stdin().lock();
@@ -42,7 +42,7 @@ pub fn run(output: &mut impl Write, lexer: &Lexer, source_code: &str, start_pos:
     let mut items = Vec::new();
     let mut lexeme_stream = IteratorStream::from(lexemes.into_iter());
     while !lexeme_stream.is_empty() {
-        let Doc(item, _) = parse_doc_item(&mut lexeme_stream)?;
+        let Doc(item, _) = Doc::parse(&mut lexeme_stream)?;
         items.push(item);
     }
     // let valid_items = items.into_iter().map(|item| item::validate(item)).collect();
