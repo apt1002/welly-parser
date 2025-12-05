@@ -7,16 +7,18 @@ use super::loc::{Location, Loc};
 use super::stream::{Stream};
 use super::enums::{BracketKind, Separator, Op, OpWord, ALL_OP_WORDS, ALL_ASSIGN_WORDS, ItemWord, ALL_ITEM_WORDS};
 
-pub const UNTERMINATED_BLOCK_COMMENT: &'static str = "Unterminated block comment";
-pub const UNTERMINATED_STRING: &'static str = "Unterminated string";
-pub const MISSING_CHAR: &'static str = "Missing character literal";
-pub const UNTERMINATED_CHAR: &'static str = "Unterminated character literal";
-pub const BAD_ESCAPE: &'static str = "Unexpected escape sequence";
-pub const MISSING_SEQUENCE: &'static str = "Missing escape sequence";
-pub const MISSING_HEX: &'static str = "Expected a hex digit";
-pub const ILLEGAL: &'static str = "Illegal character";
-pub const INVALID: &'static str = "Invalid unicode scalar value";
-pub const BAD_OPERATOR: &'static str = "Unknown operator";
+pub type LexerError = &'static str;
+
+pub const UNTERMINATED_BLOCK_COMMENT: LexerError = "Unterminated block comment";
+pub const UNTERMINATED_STRING: LexerError = "Unterminated string";
+pub const MISSING_CHAR: LexerError = "Missing character literal";
+pub const UNTERMINATED_CHAR: LexerError = "Unterminated character literal";
+pub const BAD_ESCAPE: LexerError = "Unexpected escape sequence";
+pub const MISSING_SEQUENCE: LexerError = "Missing escape sequence";
+pub const MISSING_HEX: LexerError = "Expected a hex digit";
+pub const ILLEGAL: LexerError = "Illegal character";
+pub const INVALID: LexerError = "Invalid unicode scalar value";
+pub const BAD_OPERATOR: LexerError = "Unknown operator";
 
 /// If `c` is a hexadecimal digit, return its numeric value.
 fn hex_digit_value(c: char) -> Option<u32> {
@@ -95,8 +97,6 @@ pub enum Lexeme {
 }
 
 // ----------------------------------------------------------------------------
-
-pub type LexerError = &'static str;
 
 /// Tests whether `c` can be part of a Welly operator keyword.
 fn is_operator_char(c: char) -> bool {

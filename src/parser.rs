@@ -6,11 +6,13 @@ use super::{enums, lexer};
 use enums::{Separator, BracketKind as BK, Op, Precedence, OpInfo, ItemWord};
 use lexer::{Comment, Atom, Lexeme};
 
-pub const MISSING_ITEM: &'static str = "Expected an item";
-pub const MISMATCHED_BRACKET: &'static str = "Mismatched bracket";
-pub const MISSING_LEFT: &'static str = "Missing formula before this operator";
-pub const MISSING_RIGHT: &'static str = "Missing formula after this operator";
-pub const MISSING_OP: &'static str = "Missing operator before this formula";
+type ParserError = &'static str;
+
+pub const MISSING_ITEM: ParserError = "Expected an item";
+pub const MISMATCHED_BRACKET: ParserError = "Mismatched bracket";
+pub const MISSING_LEFT: ParserError = "Missing formula before this operator";
+pub const MISSING_RIGHT: ParserError = "Missing formula after this operator";
+pub const MISSING_OP: ParserError = "Missing operator before this formula";
 
 // ----------------------------------------------------------------------------
 
@@ -131,11 +133,9 @@ type Bracket = Box<[Doc<Item>]>;
 
 // ----------------------------------------------------------------------------
 
-type ItemError = &'static str;
-
 /// Parse an [`Item`] preceded by zero or more [`Comment`]s.
 pub fn parse_doc_item(input: &mut impl Stream<Item=Loc<Lexeme>>)
--> Result<Doc<Item>, Option<Loc<ItemError>>> {
+-> Result<Doc<Item>, Option<Loc<ParserError>>> {
     let mut docs = Vec::new();
     loop {
         let Some(l) = input.read() else { Err(None)? };
@@ -149,7 +149,7 @@ pub fn parse_doc_item(input: &mut impl Stream<Item=Loc<Lexeme>>)
 
 /// Parse an [`Item`].
 pub fn parse_item(input: &mut impl Stream<Item=Loc<Lexeme>>)
--> Result<Item, Option<Loc<ItemError>>> {
+-> Result<Item, Option<Loc<ParserError>>> {
     let Some(l) = input.read() else { Err(None)? };
     Ok(match &l.0 {
         Lexeme::Atom(_) | Lexeme::Op(_) | Lexeme::Open(BK::Round) | Lexeme::Open(BK::Square) | Lexeme::Assign(_) => {
@@ -192,10 +192,12 @@ pub fn parse_item(input: &mut impl Stream<Item=Loc<Lexeme>>)
     })
 }
 
-/// Parse a [`Formula`] containing operators whose left [`Precedence`] exceeds
-/// `limit`. Use `Precedence::MIN` for `limit` to parse a complete `Formula`.
+/// Parse an optional [`Formula`] containing operators whose left
+/// [`Precedence`] exceeds `limit`.
+///
+/// Use `Precedence::MIN` for `limit` to parse a complete `Formula`.
 fn parse_formula(limit: Precedence, input: &mut impl Stream<Item=Loc<Lexeme>>)
--> Result<Option<Formula>, Option<Loc<ItemError>>> {
+-> Result<Option<Formula>, Option<Loc<ParserError>>> {
     // Parse an initial [`Formula`].
     let Some(l) = input.read() else { Err(None)? };
     let mut formula = match &l.0 {
@@ -249,7 +251,7 @@ fn parse_formula(limit: Precedence, input: &mut impl Stream<Item=Loc<Lexeme>>)
 /// Given an optional left operand, an operator, and its right [`Precedence`]
 /// (if any) Parse the right operand (if any).
 fn parse_operand(left: Option<Formula>, op: Loc<Op>, right: Option<Precedence>, input: &mut impl Stream<Item=Loc<Lexeme>>)
--> Result<Formula, Option<Loc<ItemError>>> {
+-> Result<Formula, Option<Loc<ParserError>>> {
     let right = if let Some(right) = right {
         Some(parse_formula(right, input)?.ok_or(Loc(MISSING_RIGHT, op.1))?)
     } else {
@@ -261,7 +263,7 @@ fn parse_operand(left: Option<Formula>, op: Loc<Op>, right: Option<Precedence>, 
 /// Parse a [`Bracket`] starting after the open bracket.
 /// - open - the open bracket.
 pub fn parse_bracket(open: Loc<BK>, input: &mut impl Stream<Item=Loc<Lexeme>>)
--> Result<Loc<Bracket>, Option<Loc<ItemError>>> {
+-> Result<Loc<Bracket>, Option<Loc<ParserError>>> {
     let mut contents = Vec::new();
     loop {
         let Some(l) = input.read() else { Err(None)? };
