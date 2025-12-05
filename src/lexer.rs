@@ -12,7 +12,7 @@ use super::enums::{BracketKind, Separator, Op, OpWord, ALL_OP_WORDS, ALL_ASSIGN_
 pub type LexerError = &'static str;
 
 pub const UNTERMINATED_BLOCK_COMMENT: LexerError = "Unterminated block comment";
-pub const UNTERMINATED_STRING: LexerError = "Unterminated string";
+pub const UNTERMINATED_STR: LexerError = "Unterminated string";
 pub const MISSING_CHAR: LexerError = "Missing character literal";
 pub const UNTERMINATED_CHAR: LexerError = "Unterminated character literal";
 pub const BAD_ESCAPE: LexerError = "Unexpected escape sequence";
@@ -51,13 +51,13 @@ pub enum Atom {
     ///
     /// A character literal consists of a single character or escape sequence
     /// enclosed in ASCII `'` characters.
-    CharacterLiteral(char),
+    CharLiteral(char),
 
     /// A Welly string literal.
     ///
     /// A string literal consists of zero or more characters or escape sequences
     /// enclosed in ASCII `"` characters.
-    StringLiteral(Rc<str>),
+    StrLiteral(Rc<str>),
 
     /// A Welly identifier, tag or number: a maximal word made of letters,
     /// digits and underscores.
@@ -67,8 +67,8 @@ pub enum Atom {
 impl fmt::Debug for Atom {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::CharacterLiteral(c) => c.fmt(f),
-            Self::StringLiteral(s) => s.fmt(f),
+            Self::CharLiteral(c) => c.fmt(f),
+            Self::StrLiteral(s) => s.fmt(f),
             Self::Alphanumeric(s) => f.write_str(s),
         }
     }
@@ -195,7 +195,7 @@ impl Lexer {
     }
     /// Parse a character literal, starting after the initial `'`.
     /// - quote - the [`Location`] of the initial `'`.
-    fn lex_character_literal(&self, quote: Location, input: &mut impl Stream<Item=Loc<char>>)
+    fn lex_char_literal(&self, quote: Location, input: &mut impl Stream<Item=Loc<char>>)
     -> Result<Loc<Lexeme>, Option<Loc<LexerError>>> {
         let mut loc = quote;
         let Some((c, is_escaped)) = self.lex_char(input)? else { Err(Loc(MISSING_CHAR, loc))? };
@@ -204,22 +204,22 @@ impl Lexer {
         let Some(c2) = input.read() else { Err(Loc(UNTERMINATED_CHAR, loc))? };
         if c2.0 != '\'' { input.unread(c2); Err(Loc(UNTERMINATED_CHAR, loc))? }
         loc.end = c2.1.end;
-        Ok(Loc(Lexeme::Atom(Atom::CharacterLiteral(c.0)), loc))
+        Ok(Loc(Lexeme::Atom(Atom::CharLiteral(c.0)), loc))
     }
 
     /// Parse a string literal, starting after the initial `"`.
     /// - quote - the [`Location`] of the initial `"`.
-    fn lex_string_literal(&self, quote: Location, input: &mut impl Stream<Item=Loc<char>>)
+    fn lex_str_literal(&self, quote: Location, input: &mut impl Stream<Item=Loc<char>>)
     -> Result<Loc<Lexeme>, Option<Loc<LexerError>>> {
         let mut loc = quote;
         let mut s = String::new();
         loop {
-            let Some((c, is_escaped)) = self.lex_char(input)? else { Err(Loc(UNTERMINATED_STRING, loc))? };
+            let Some((c, is_escaped)) = self.lex_char(input)? else { Err(Loc(UNTERMINATED_STR, loc))? };
             loc.end = c.1.end;
             if c.0 == '"' && !is_escaped { break; }
             s.push(c.0);
         }
-        Ok(Loc(Lexeme::Atom(Atom::StringLiteral(s.into())), loc))
+        Ok(Loc(Lexeme::Atom(Atom::StrLiteral(s.into())), loc))
     }
 
     /// Parse a line comment, starting after the initial `//`.
@@ -310,8 +310,8 @@ impl Lexer {
         let Some(c) = input.read() else { Err(None)? };
         Ok(Some(match c.0 {
             '\t' | '\n' | '\r' | ' ' => { return Ok(None); },
-            '\'' => { self.lex_character_literal(c.1, input)? },
-            '\"' => { self.lex_string_literal(c.1, input)? },
+            '\'' => { self.lex_char_literal(c.1, input)? },
+            '\"' => { self.lex_str_literal(c.1, input)? },
             ',' => { Loc(Lexeme::Separator(Separator::Comma), c.1) },
             ';' => { Loc(Lexeme::Separator(Separator::Semicolon), c.1) },
             '(' => { Loc(Lexeme::Open(BracketKind::Round), c.1) },
