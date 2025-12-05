@@ -1,6 +1,7 @@
 //! Welly's lexer.
 
 use std::collections::{HashMap};
+use std::{fmt};
 use std::rc::{Rc};
 
 use super::loc::{Location, Loc};
@@ -44,7 +45,7 @@ fn hex_digit_value(c: char) -> Option<u32> {
 pub struct Comment;
 
 /// Lexer tokens that are complete expressions.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Atom {
     /// A Welly character literal.
     ///
@@ -61,6 +62,16 @@ pub enum Atom {
     /// A Welly identifier, tag or number: a maximal word made of letters,
     /// digits and underscores.
     Alphanumeric(Rc<str>),
+}
+
+impl fmt::Debug for Atom {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::CharacterLiteral(c) => c.fmt(f),
+            Self::StringLiteral(s) => s.fmt(f),
+            Self::Alphanumeric(s) => f.write_str(s),
+        }
+    }
 }
 
 /// The output type of the lexer.
