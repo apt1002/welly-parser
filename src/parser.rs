@@ -220,28 +220,29 @@ fn parse_formula(limit: Precedence, input: &mut impl Stream<Item=Loc<Lexeme>>)
 
 /// Given a left operand, parse operators whose [`Precedence`] exceeds `limit`,
 /// and their operands.
-fn parse_operator(formula: Formula, limit: Precedence, input: &mut impl Stream<Item=Loc<Lexeme>>)
+fn parse_operator(mut formula: Formula, limit: Precedence, input: &mut impl Stream<Item=Loc<Lexeme>>)
 -> Result<Formula, Option<Loc<ItemError>>> {
-    let Some(l) = input.read() else { Err(None)? };
-    let formula = match &l.0 {
-        Lexeme::Atom(_) => { Err(Loc(MISSING_OP, l.1))? },
-        Lexeme::Op(op_word) => {
-            let OpInfo {op, left, right} = op_word.with_left;
-            let Some(left) = left else { Err(Loc(MISSING_OP, l.1))? };
-            if limit >= left {
+    loop {
+        let Some(l) = input.read() else { Err(None)? };
+        formula = match &l.0 {
+            Lexeme::Atom(_) => { Err(Loc(MISSING_OP, l.1))? },
+            Lexeme::Op(op_word) => {
+                let OpInfo {op, left, right} = op_word.with_left;
+                let Some(left) = left else { Err(Loc(MISSING_OP, l.1))? };
+                if limit >= left {
+                    input.unread(l);
+                    return Ok(formula);
+                }
+                parse_operand(Some(formula), Loc(op, l.1), right, input)?
+            },
+            Lexeme::Open(BK::Round) => Formula::RoundCall(Box::new(formula), parse_bracket(Loc(BK::Round, l.1), input)?),
+            Lexeme::Open(BK::Square) => Formula::SquareCall(Box::new(formula), parse_bracket(Loc(BK::Square, l.1), input)?),
+            _ => {
                 input.unread(l);
                 return Ok(formula);
-            }
-            parse_operand(Some(formula), Loc(op, l.1), right, input)?
-        },
-        Lexeme::Open(BK::Round) => Formula::RoundCall(Box::new(formula), parse_bracket(Loc(BK::Round, l.1), input)?),
-        Lexeme::Open(BK::Square) => Formula::SquareCall(Box::new(formula), parse_bracket(Loc(BK::Square, l.1), input)?),
-        _ => {
-            input.unread(l);
-            return Ok(formula);
-        },
-    };
-    parse_operator(formula, limit, input)
+            },
+        };
+    }
 }
 
 /// Given a left operand, an operator, and its right [`Precedence`] (if any),
