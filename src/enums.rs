@@ -167,6 +167,10 @@ pub enum Op {
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Precedence(NonZeroU8);
 
+impl Precedence {
+    pub const MIN: Self = Precedence(NonZeroU8::new(1).unwrap());
+}
+
 const fn p(n: u8) -> Option<Precedence> { Some(Precedence(NonZeroU8::new(n).unwrap())) }
 
 /// An [`Op`] with its binding precedences.

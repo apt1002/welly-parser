@@ -3,11 +3,14 @@ use std::{fmt};
 use super::loc::{Location, Loc, List};
 use super::stream::{Stream};
 use super::{enums, lexer};
-use enums::{Separator, BracketKind, Op, OpWord, ItemWord};
+use enums::{Separator, BracketKind as BK, Op, Precedence, OpInfo, OpWord, ItemWord};
 use lexer::{Comment, Atom, Lexeme};
 
 pub const MISSING_ITEM: &'static str = "Expected an item";
 pub const MISMATCHED_BRACKET: &'static str = "Mismatched bracket";
+pub const MISSING_LEFT: &'static str = "Missing formula before this operator";
+pub const MISSING_RIGHT: &'static str = "Missing formula after this operator";
+pub const MISSING_OP: &'static str = "Missing operator before this formula";
 
 // ----------------------------------------------------------------------------
 
@@ -21,11 +24,10 @@ impl<T: fmt::Debug> fmt::Debug for Doc<T> {
 
 // ----------------------------------------------------------------------------
 
-/// Part of a [`Formula`].
-///
-/// `Noun`s are generally wrapped in `Loc`.
+/// A [`Formula`] is initially parsed as a maximal string of [`Noun`]s, but
+/// after further processing they do not appear as part of the parse tree.
 #[derive(Debug, Clone)]
-pub enum Noun {
+enum Noun {
     /// A lexeme that is an expression on its own.
     Atom(Atom),
 
@@ -39,8 +41,60 @@ pub enum Noun {
     Square(Bracket),
 }
 
-/// A maximal string of [`Noun`]s.
-type Formula = List<Noun>;
+// ----------------------------------------------------------------------------
+
+/// [`Atom`]s combined using [`Bracket`]s and [`Op`]s.
+#[derive(Debug, Clone)]
+pub enum Formula {
+    /// A lexeme that is an expression on its own.
+    Atom(Loc<Atom>),
+
+    /// Something enclosed in round brackets.
+    RoundGroup(Loc<Bracket>),
+
+    /// Something enclosed in square brackets.
+    SquareGroup(Loc<Bracket>),
+
+    /// An arithmetic operator applied to up to two arguments.
+    Op(Option<Box<Formula>>, Loc<Op>, Option<Box<Formula>>),
+
+    /// A `Formula` followed by round brackets.
+    RoundCall(Box<Formula>, Loc<Bracket>),
+
+    /// A `Formula` followed by square brackets.
+    SquareCall(Box<Formula>, Loc<Bracket>),
+}
+
+impl Formula {
+    /// Returns a [`Location`] spanning this whole `Formula`.
+    pub fn loc(&self) -> Location { Location {start: self.loc_start(), end: self.loc_end()} }
+
+    /// Used to compute `self.loc().start`.
+    pub fn loc_start(&self) -> usize {
+        match self {
+            Formula::Atom(l) => l.1.start,
+            Formula::RoundGroup(l) => l.1.start,
+            Formula::SquareGroup(l) => l.1.start,
+            Formula::Op(Some(left), _, _) => left.loc_start(),
+            Formula::Op(None, l, _) => l.1.start,
+            Formula::RoundCall(left, _) => left.loc_start(),
+            Formula::SquareCall(left, _) => left.loc_start(),
+        }
+    }
+
+    /// Used to compute `self.loc().end`.
+    pub fn loc_end(&self) -> usize {
+        match self {
+            Formula::Atom(l) => l.1.end,
+            Formula::RoundGroup(l) => l.1.end,
+            Formula::SquareGroup(l) => l.1.end,
+            Formula::Op(_, _, Some(right)) => right.loc_end(),
+            Formula::Op(_, l, None) => l.1.end,
+            Formula::RoundCall(_, l) => l.1.end,
+            Formula::SquareCall(_, l) => l.1.end,
+        }
+    }
+}
 
 // ----------------------------------------------------------------------------
 
@@ -57,17 +111,17 @@ pub enum Item {
     Eval(Formula),
 
     /// `pattern op= expr;` mutates the names in the pattern.
-    Assign(Formula, Loc<Option<Op>>, Formula),
+    Assign(Option<Formula>, Loc<Option<Op>>, Option<Formula>),
 
     /// `keyword expr`
     ///
     /// The meaning depends on the keyword. See [`ItemWord`].
-    Verb(Loc<ItemWord>, Formula),
+    Verb(Loc<ItemWord>, Option<Formula>),
 
     /// `keyword expr { ... }`.
     ///
     /// The meaning depends on the keyword. See [`ItemWord`].
-    Control(Loc<ItemWord>, Formula, Loc<Bracket>),
+    Control(Loc<ItemWord>, Option<Formula>, Loc<Bracket>),
 
     /// Something enclosed in curly brackets.
     Block(Loc<Bracket>)
@@ -78,19 +132,14 @@ impl Item {
     pub fn loc(&self) -> Location {
         match self {
             Item::Separator(separator) => separator.1,
-            Item::Eval(expr) => expr.loc().expect("Empty Formula"),
-            Item::Assign(pattern, op, expr) => Location {
-                start: pattern.loc().unwrap_or(op.1).start,
-                end: expr.loc().unwrap_or(op.1).end,
-            },
-            Item::Verb(word, expr) => Location {
-                start: word.1.start,
-                end: expr.loc().unwrap_or(word.1).end,
-            },
-            Item::Control(word, _expr, block) => Location {
-                start: word.1.start,
-                end: block.1.end,
-            },
+            Item::Eval(expr) => expr.loc(),
+            Item::Assign(Some(pattern), _, Some(expr)) => Location {start: pattern.loc_start(), end: expr.loc_end()},
+            Item::Assign(Some(pattern), op, None) => Location {start: pattern.loc_start(), end: op.1.end},
+            Item::Assign(None, op, Some(expr)) => Location {start: op.1.start, end: expr.loc_end()},
+            Item::Assign(None, op, None) => op.1,
+            Item::Verb(word, Some(expr)) => Location {start: word.1.start, end: expr.loc_end()},
+            Item::Verb(word, None) => word.1,
+            Item::Control(word, _expr, block) => Location {start: word.1.start, end: block.1.end},
             Item::Block(block) => block.1,
         }
     }
@@ -122,29 +171,29 @@ pub fn parse_item(input: &mut impl Stream<Item=Loc<Lexeme>>)
 -> Result<Item, Option<Loc<ItemError>>> {
     let Some(l) = input.read() else { Err(None)? };
     Ok(match &l.0 {
-        Lexeme::Atom(_) | Lexeme::Op(_) | Lexeme::Open(BracketKind::Round) | Lexeme::Open(BracketKind::Square) => {
+        Lexeme::Atom(_) | Lexeme::Op(_) | Lexeme::Open(BK::Round) | Lexeme::Open(BK::Square) | Lexeme::Assign(_) => {
             input.unread(l);
-            let lhs = parse_formula(input)?;
+            let lhs = parse_optional_formula(input)?;
             let Some(l) = input.read() else { Err(None)? };
             match &l.0 {
                 Lexeme::Assign(op) => {
                     let op = Loc(*op, l.1);
-                    let rhs = parse_formula(input)?;
+                    let rhs = parse_optional_formula(input)?;
                     Item::Assign(lhs, op, rhs)
                 },
                 _ => {
                     input.unread(l);
-                    Item::Eval(lhs)
+                    Item::Eval(lhs.expect("We checked the first Lexeme"))
                 },
             }
         },
         Lexeme::Item(word) => {
             let word = Loc(*word, l.1);
-            let expr = parse_formula(input)?;
+            let expr = parse_optional_formula(input)?;
             let Some(l) = input.read() else { Err(None)? };
             match &l.0 {
-                Lexeme::Open(BracketKind::Curly) => {
-                    let block = parse_bracket(Loc(BracketKind::Curly, l.1), input)?;
+                Lexeme::Open(BK::Curly) => {
+                    let block = parse_bracket(Loc(BK::Curly, l.1), input)?;
                     Item::Control(word, expr, block)
                 },
                 _ => {
@@ -153,15 +202,8 @@ pub fn parse_item(input: &mut impl Stream<Item=Loc<Lexeme>>)
                 },
             }
         },
-        Lexeme::Assign(op) => {
-            // Guess that `lhs` is missing.
-            let lhs = List::from([]);
-            let op = Loc(*op, l.1);
-            let rhs = parse_formula(input)?;
-            Item::Assign(lhs, op, rhs)
-        },
-        Lexeme::Open(BracketKind::Curly) => {
-            let block = parse_bracket(Loc(BracketKind::Curly, l.1), input)?;
+        Lexeme::Open(BK::Curly) => {
+            let block = parse_bracket(Loc(BK::Curly, l.1), input)?;
             Item::Block(block)
         },
         Lexeme::Separator(sep) => { Item::Separator(Loc(*sep, l.1)) },
@@ -170,15 +212,67 @@ pub fn parse_item(input: &mut impl Stream<Item=Loc<Lexeme>>)
 }
 
 /// Parse a possibly-empty [`Formula`].
-pub fn parse_formula(input: &mut impl Stream<Item=Loc<Lexeme>>)
--> Result<Formula, Option<Loc<ItemError>>> {
-    let mut nouns = Vec::new();
-    while let Some(noun) = parse_noun(input)? { nouns.push(noun); }
-    Ok(List::from(nouns))
+pub fn parse_optional_formula(input: &mut impl Stream<Item=Loc<Lexeme>>)
+-> Result<Option<Formula>, Option<Loc<ItemError>>> {
+    let Some(noun) = parse_noun(input)? else { return Ok(None); };
+    let (formula, noun) = parse_formula(Precedence::MIN, noun, input)?;
+    if noun.is_some() { panic!("Operator with impossibly low precedence"); }
+    Ok(Some(formula))
+}
+
+/// Parse a [`Formula`] starting with `noun` and containing operators whose
+/// left [`Precedence`] exceeds `limit`.
+fn parse_formula(limit: Precedence, noun: Loc<Noun>, input: &mut impl Stream<Item=Loc<Lexeme>>)
+-> Result<(Formula, Option<Loc<Noun>>), Option<Loc<ItemError>>> {
+    let Loc(noun, loc) = noun;
+    let (formula, noun) = match noun {
+        Noun::Atom(atom) => (Formula::Atom(Loc(atom, loc)), parse_noun(input)?),
+        Noun::Round(bracket) => (Formula::RoundGroup(Loc(bracket, loc)), parse_noun(input)?),
+        Noun::Square(bracket) => (Formula::SquareGroup(Loc(bracket, loc)), parse_noun(input)?),
+        Noun::Op(op_word) => {
+            let OpInfo {op, left, right} = op_word.without_left;
+            if left.is_some() { Err(Loc(MISSING_LEFT, loc))? }
+            parse_operand(None, Loc(op, loc), right, parse_noun(input)?, input)?
+        },
+    };
+    parse_operator(formula, limit, noun, input)
+}
+
+/// Given a left operand, parse operators whose [`Precedence`] exceeds `limit`,
+/// and their operands, startin with `noun`.
+fn parse_operator(formula: Formula, limit: Precedence, noun: Option<Loc<Noun>>, input: &mut impl Stream<Item=Loc<Lexeme>>)
+-> Result<(Formula, Option<Loc<Noun>>), Option<Loc<ItemError>>> {
+    let Some(Loc(noun, loc)) = noun else { return Ok((formula, None)); };
+    let (formula, noun) = match noun {
+        Noun::Atom(_) => { Err(Loc(MISSING_OP, loc))? },
+        Noun::Round(bracket) => (Formula::RoundCall(Box::new(formula), Loc(bracket, loc)), parse_noun(input)?),
+        Noun::Square(bracket) => (Formula::SquareCall(Box::new(formula), Loc(bracket, loc)), parse_noun(input)?),
+        Noun::Op(op_word) => {
+            let OpInfo {op, left, right} = op_word.with_left;
+            let Some(left) = left else { Err(Loc(MISSING_OP, loc))? };
+            if limit >= left { return Ok((formula, Some(Loc(Noun::Op(op_word), loc)))); }
+            parse_operand(Some(formula), Loc(op, loc), right, parse_noun(input)?, input)?
+        },
+    };
+    parse_operator(formula, limit, noun, input)
+}
+
+/// Given a left operand, an operator, and its right [`Precedence`] (if any),
+/// Parse the right operand (if any) starting with `noun`.
+fn parse_operand(left: Option<Formula>, op: Loc<Op>, right: Option<Precedence>, noun: Option<Loc<Noun>>, input: &mut impl Stream<Item=Loc<Lexeme>>)
+-> Result<(Formula, Option<Loc<Noun>>), Option<Loc<ItemError>>> {
+    let (right, noun) = if let Some(right) = right {
+        let Some(noun) = noun else { Err(Loc(MISSING_RIGHT, op.1))? };
+        let (right, noun) = parse_formula(right, noun, input)?;
+        (Some(right), noun)
+    } else {
+        (None, noun)
+    };
+    Ok((Formula::Op(left.map(Box::new), op, right.map(Box::new)), noun))
 }
 
 /// Parse a [`Noun`] if possible.
-pub fn parse_noun(input: &mut impl Stream<Item=Loc<Lexeme>>)
+fn parse_noun(input: &mut impl Stream<Item=Loc<Lexeme>>)
 -> Result<Option<Loc<Noun>>, Option<Loc<ItemError>>> {
     let Some(l) = input.read() else { Err(None)? };
     Ok(Some(match &l.0 {
@@ -188,11 +282,11 @@ pub fn parse_noun(input: &mut impl Stream<Item=Loc<Lexeme>>)
         Lexeme::Op(op) => {
             Loc(Noun::Op(*op), l.1)
         },
-        Lexeme::Open(BracketKind::Round) => {
-            parse_bracket(Loc(BracketKind::Round, l.1), input)?.map(Noun::Round)
+        Lexeme::Open(BK::Round) => {
+            parse_bracket(Loc(BK::Round, l.1), input)?.map(Noun::Round)
         },
-        Lexeme::Open(BracketKind::Square) => {
-            parse_bracket(Loc(BracketKind::Square, l.1), input)?.map(Noun::Square)
+        Lexeme::Open(BK::Square) => {
+            parse_bracket(Loc(BK::Square, l.1), input)?.map(Noun::Square)
         },
         _ => {
             input.unread(l);
@@ -203,7 +297,7 @@ pub fn parse_noun(input: &mut impl Stream<Item=Loc<Lexeme>>)
 
 /// Parse a [`Bracket`] starting after the open bracket.
 /// - open - the open bracket.
-pub fn parse_bracket(open: Loc<BracketKind>, input: &mut impl Stream<Item=Loc<Lexeme>>)
+pub fn parse_bracket(open: Loc<BK>, input: &mut impl Stream<Item=Loc<Lexeme>>)
 -> Result<Loc<Bracket>, Option<Loc<ItemError>>> {
     let mut contents = Vec::new();
     loop {
