@@ -53,7 +53,7 @@ impl<T: fmt::Debug> fmt::Debug for Doc<T> {
 // ----------------------------------------------------------------------------
 
 /// [`Atom`]s combined using [`Bracket`]s and [`Op`]s.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Formula {
     /// A lexeme that is an expression on its own.
     Atom(Loc<Atom>),
@@ -174,13 +174,40 @@ impl Formula {
     }
 }
 
+impl fmt::Debug for Formula {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Atom(atom) => atom.fmt(f),
+            Self::RoundGroup(bracket) => {
+                let mut t = f.debug_tuple("RoundGroup");
+                for item in &bracket.0 { t.field(item); }
+                t.finish()
+            },
+            Self::SquareGroup(bracket) => {
+                let mut t = f.debug_tuple("SquareGroup");
+                for item in &bracket.0 { t.field(item); }
+                t.finish()
+            },
+            Self::Op(left, op, right) => {
+                let mut t = f.debug_tuple("Op");
+                if let Some(left) = left { t.field(left); }
+                t.field(op);
+                if let Some(right) = right { t.field(right); }
+                t.finish()
+            },
+            Self::RoundCall(left, bracket) => f.debug_tuple("RoundCall").field(left).field(bracket).finish(),
+            Self::SquareCall(left, bracket) => f.debug_tuple("SquareCall").field(left).field(bracket).finish(),
+        }
+    }
+}
+
 // ----------------------------------------------------------------------------
 
 /// The top-level non-terminal in a source file, at the REPL, or inside a
 /// bracket.
 ///
 /// `Item`s are generally wrapped in [`Doc`].
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Item {
     /// A comma or semicolon.
     Separator(Loc<Separator>),
@@ -265,6 +292,40 @@ impl Item {
             Lexeme::Separator(sep) => { Self::Separator(Loc(*sep, l.1)) },
             _ => { Err(Loc(MISSING_ITEM, l.1))? },
         })
+    }
+}
+
+impl fmt::Debug for Item {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self {
+            Self::Separator(sep) => sep.fmt(f),
+            Self::Eval(formula) => formula.fmt(f),
+            Self::Assign(left, op, right) => {
+                let mut t = f.debug_tuple("Assign");
+                if let Some(left) = left { t.field(left); }
+                t.field(op);
+                if let Some(right) = right { t.field(right); }
+                t.finish()
+            },
+            Self::Verb(word, formula) => {
+                let mut t = f.debug_tuple("Verb");
+                t.field(word);
+                if let Some(formula) = formula{ t.field(formula); }
+                t.finish()
+            },
+            Self::Control(word, formula, block) => {
+                let mut t = f.debug_tuple("Control");
+                t.field(word);
+                if let Some(formula) = formula{ t.field(formula); }
+                t.field(block);
+                t.finish()
+            },
+            Self::Block(bracket) => {
+                let mut t = f.debug_tuple("Block");
+                for item in &bracket.0 { t.field(item); }
+                t.finish()
+            }
+        }
     }
 }
 
