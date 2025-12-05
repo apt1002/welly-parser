@@ -3,7 +3,7 @@ use std::{fmt};
 use super::loc::{Location, Loc, List};
 use super::stream::{Stream};
 use super::{enums, lexer};
-use enums::{Separator, BracketKind as BK, Op, Precedence, OpInfo, OpWord, ItemWord};
+use enums::{Separator, BracketKind as BK, Op, Precedence, OpInfo, ItemWord};
 use lexer::{Comment, Atom, Lexeme};
 
 pub const MISSING_ITEM: &'static str = "Expected an item";
@@ -20,25 +20,6 @@ pub struct Doc<T>(pub T, pub List<Comment>);
 
 impl<T: fmt::Debug> fmt::Debug for Doc<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.0.fmt(f) }
-}
-
-// ----------------------------------------------------------------------------
-
-/// A [`Formula`] is initially parsed as a maximal string of [`Noun`]s, but
-/// after further processing they do not appear as part of the parse tree.
-#[derive(Debug, Clone)]
-enum Noun {
-    /// A lexeme that is an expression on its own.
-    Atom(Atom),
-
-    /// An arithmetic operator or keyword constant.
-    Op(OpWord),
-
-    /// Something enclosed in round brackets.
-    Round(Bracket),
-
-    /// Something enclosed in square brackets.
-    Square(Bracket),
 }
 
 // ----------------------------------------------------------------------------
@@ -173,12 +154,12 @@ pub fn parse_item(input: &mut impl Stream<Item=Loc<Lexeme>>)
     Ok(match &l.0 {
         Lexeme::Atom(_) | Lexeme::Op(_) | Lexeme::Open(BK::Round) | Lexeme::Open(BK::Square) | Lexeme::Assign(_) => {
             input.unread(l);
-            let lhs = parse_optional_formula(input)?;
+            let lhs = parse_formula(Precedence::MIN, input)?;
             let Some(l) = input.read() else { Err(None)? };
             match &l.0 {
                 Lexeme::Assign(op) => {
                     let op = Loc(*op, l.1);
-                    let rhs = parse_optional_formula(input)?;
+                    let rhs = parse_formula(Precedence::MIN, input)?;
                     Item::Assign(lhs, op, rhs)
                 },
                 _ => {
@@ -189,7 +170,7 @@ pub fn parse_item(input: &mut impl Stream<Item=Loc<Lexeme>>)
         },
         Lexeme::Item(word) => {
             let word = Loc(*word, l.1);
-            let expr = parse_optional_formula(input)?;
+            let expr = parse_formula(Precedence::MIN, input)?;
             let Some(l) = input.read() else { Err(None)? };
             match &l.0 {
                 Lexeme::Open(BK::Curly) => {
@@ -211,88 +192,68 @@ pub fn parse_item(input: &mut impl Stream<Item=Loc<Lexeme>>)
     })
 }
 
-/// Parse a possibly-empty [`Formula`].
-pub fn parse_optional_formula(input: &mut impl Stream<Item=Loc<Lexeme>>)
+/// Parse a [`Formula`] containing operators whose left [`Precedence`] exceeds
+/// `limit`. Use `Precedence::MIN` for `limit` to parse a complete `Formula`.
+fn parse_formula(limit: Precedence, input: &mut impl Stream<Item=Loc<Lexeme>>)
 -> Result<Option<Formula>, Option<Loc<ItemError>>> {
-    let Some(noun) = parse_noun(input)? else { return Ok(None); };
-    let (formula, noun) = parse_formula(Precedence::MIN, noun, input)?;
-    if noun.is_some() { panic!("Operator with impossibly low precedence"); }
-    Ok(Some(formula))
-}
-
-/// Parse a [`Formula`] starting with `noun` and containing operators whose
-/// left [`Precedence`] exceeds `limit`.
-fn parse_formula(limit: Precedence, noun: Loc<Noun>, input: &mut impl Stream<Item=Loc<Lexeme>>)
--> Result<(Formula, Option<Loc<Noun>>), Option<Loc<ItemError>>> {
-    let Loc(noun, loc) = noun;
-    let (formula, noun) = match noun {
-        Noun::Atom(atom) => (Formula::Atom(Loc(atom, loc)), parse_noun(input)?),
-        Noun::Round(bracket) => (Formula::RoundGroup(Loc(bracket, loc)), parse_noun(input)?),
-        Noun::Square(bracket) => (Formula::SquareGroup(Loc(bracket, loc)), parse_noun(input)?),
-        Noun::Op(op_word) => {
-            let OpInfo {op, left, right} = op_word.without_left;
-            if left.is_some() { Err(Loc(MISSING_LEFT, loc))? }
-            parse_operand(None, Loc(op, loc), right, parse_noun(input)?, input)?
-        },
-    };
-    parse_operator(formula, limit, noun, input)
-}
-
-/// Given a left operand, parse operators whose [`Precedence`] exceeds `limit`,
-/// and their operands, startin with `noun`.
-fn parse_operator(formula: Formula, limit: Precedence, noun: Option<Loc<Noun>>, input: &mut impl Stream<Item=Loc<Lexeme>>)
--> Result<(Formula, Option<Loc<Noun>>), Option<Loc<ItemError>>> {
-    let Some(Loc(noun, loc)) = noun else { return Ok((formula, None)); };
-    let (formula, noun) = match noun {
-        Noun::Atom(_) => { Err(Loc(MISSING_OP, loc))? },
-        Noun::Round(bracket) => (Formula::RoundCall(Box::new(formula), Loc(bracket, loc)), parse_noun(input)?),
-        Noun::Square(bracket) => (Formula::SquareCall(Box::new(formula), Loc(bracket, loc)), parse_noun(input)?),
-        Noun::Op(op_word) => {
-            let OpInfo {op, left, right} = op_word.with_left;
-            let Some(left) = left else { Err(Loc(MISSING_OP, loc))? };
-            if limit >= left { return Ok((formula, Some(Loc(Noun::Op(op_word), loc)))); }
-            parse_operand(Some(formula), Loc(op, loc), right, parse_noun(input)?, input)?
-        },
-    };
-    parse_operator(formula, limit, noun, input)
-}
-
-/// Given a left operand, an operator, and its right [`Precedence`] (if any),
-/// Parse the right operand (if any) starting with `noun`.
-fn parse_operand(left: Option<Formula>, op: Loc<Op>, right: Option<Precedence>, noun: Option<Loc<Noun>>, input: &mut impl Stream<Item=Loc<Lexeme>>)
--> Result<(Formula, Option<Loc<Noun>>), Option<Loc<ItemError>>> {
-    let (right, noun) = if let Some(right) = right {
-        let Some(noun) = noun else { Err(Loc(MISSING_RIGHT, op.1))? };
-        let (right, noun) = parse_formula(right, noun, input)?;
-        (Some(right), noun)
-    } else {
-        (None, noun)
-    };
-    Ok((Formula::Op(left.map(Box::new), op, right.map(Box::new)), noun))
-}
-
-/// Parse a [`Noun`] if possible.
-fn parse_noun(input: &mut impl Stream<Item=Loc<Lexeme>>)
--> Result<Option<Loc<Noun>>, Option<Loc<ItemError>>> {
     let Some(l) = input.read() else { Err(None)? };
-    Ok(Some(match &l.0 {
-        Lexeme::Atom(atom) => {
-            Loc(Noun::Atom(atom.clone()), l.1)
+    let formula = match &l.0 {
+        Lexeme::Atom(atom) => Formula::Atom(Loc(atom.clone(), l.1)),
+        Lexeme::Op(op_word) => {
+            let OpInfo {op, left, right} = op_word.without_left;
+            if let Some(left) = left {
+                if limit < left { Err(Loc(MISSING_LEFT, l.1))? }
+                input.unread(l);
+                return Ok(None);
+            }
+            parse_operand(None, Loc(op, l.1), right, input)?
         },
-        Lexeme::Op(op) => {
-            Loc(Noun::Op(*op), l.1)
-        },
-        Lexeme::Open(BK::Round) => {
-            parse_bracket(Loc(BK::Round, l.1), input)?.map(Noun::Round)
-        },
-        Lexeme::Open(BK::Square) => {
-            parse_bracket(Loc(BK::Square, l.1), input)?.map(Noun::Square)
-        },
+        Lexeme::Open(BK::Round) => Formula::RoundGroup(parse_bracket(Loc(BK::Round, l.1), input)?),
+        Lexeme::Open(BK::Square) => Formula::SquareGroup(parse_bracket(Loc(BK::Square, l.1), input)?),
         _ => {
             input.unread(l);
             return Ok(None);
         },
-    }))
+    };
+    Ok(Some(parse_operator(formula, limit, input)?))
+}
+
+/// Given a left operand, parse operators whose [`Precedence`] exceeds `limit`,
+/// and their operands.
+fn parse_operator(formula: Formula, limit: Precedence, input: &mut impl Stream<Item=Loc<Lexeme>>)
+-> Result<Formula, Option<Loc<ItemError>>> {
+    let Some(l) = input.read() else { Err(None)? };
+    let formula = match &l.0 {
+        Lexeme::Atom(_) => { Err(Loc(MISSING_OP, l.1))? },
+        Lexeme::Op(op_word) => {
+            let OpInfo {op, left, right} = op_word.with_left;
+            let Some(left) = left else { Err(Loc(MISSING_OP, l.1))? };
+            if limit >= left {
+                input.unread(l);
+                return Ok(formula);
+            }
+            parse_operand(Some(formula), Loc(op, l.1), right, input)?
+        },
+        Lexeme::Open(BK::Round) => Formula::RoundCall(Box::new(formula), parse_bracket(Loc(BK::Round, l.1), input)?),
+        Lexeme::Open(BK::Square) => Formula::SquareCall(Box::new(formula), parse_bracket(Loc(BK::Square, l.1), input)?),
+        _ => {
+            input.unread(l);
+            return Ok(formula);
+        },
+    };
+    parse_operator(formula, limit, input)
+}
+
+/// Given a left operand, an operator, and its right [`Precedence`] (if any),
+/// Parse the right operand (if any).
+fn parse_operand(left: Option<Formula>, op: Loc<Op>, right: Option<Precedence>, input: &mut impl Stream<Item=Loc<Lexeme>>)
+-> Result<Formula, Option<Loc<ItemError>>> {
+    let right = if let Some(right) = right {
+        Some(parse_formula(right, input)?.ok_or(Loc(MISSING_RIGHT, op.1))?)
+    } else {
+        None
+    };
+    Ok(Formula::Op(left.map(Box::new), op, right.map(Box::new)))
 }
 
 /// Parse a [`Bracket`] starting after the open bracket.
