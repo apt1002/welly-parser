@@ -11,7 +11,6 @@ use super::enums::{BracketKind, Separator, Op, OpWord, ALL_OP_WORDS, ALL_ASSIGN_
 /// The error type of the `lex_xxx()` functions.
 pub type LexerError = &'static str;
 
-pub const UNTERMINATED_BLOCK_COMMENT: LexerError = "Unterminated block comment";
 pub const UNTERMINATED_STR: LexerError = "Unterminated string";
 pub const MISSING_CHAR: LexerError = "Missing character literal";
 pub const UNTERMINATED_CHAR: LexerError = "Unterminated character literal";
@@ -146,19 +145,14 @@ impl Lexer {
     /// - escape - the [`Location`] of the backslash.
     /// - num_digits - the number of hexadecimal digits required.
     fn lex_hex(&self, escape: Location, input: &mut impl Stream<Item=Loc<char>>, num_digits: usize)
-    -> Result<Loc<char>, Loc<LexerError>> {
+    -> Result<Loc<char>, Option<Loc<LexerError>>> {
         let mut ret: u32 = 0;
         let mut loc = escape;
         for i in 0..num_digits {
-            let Some(c) = input.read() else { Err(Loc(MISSING_HEX, loc))? };
-            if let Some(d) = hex_digit_value(c.0) {
-                ret |= d << (i * 4);
-                loc.end = c.1.end;
-            } else {
-                // `c` is not a digit.
-                input.unread(c);
-                Err(Loc(MISSING_HEX, loc))?
-            }
+            let Some(c) = input.read() else { Err(None)? };
+            loc.end = c.1.end;
+            let Some(d) = hex_digit_value(c.0) else { Err(Loc(MISSING_HEX, loc))? };
+            ret |= d << (i * 4);
         }
         let Some(ret) = char::from_u32(ret) else { Err(Loc(INVALID, loc))? };
         Ok(Loc(ret, loc))
@@ -170,47 +164,47 @@ impl Lexer {
     /// - `true` if it was escaped.
     /// Returns an error if there is an invalid escape sequence.
     fn lex_char(&self, input: &mut impl Stream<Item=Loc<char>>)
-    -> Result<Option<(Loc<char>, bool)>, Loc<LexerError>> {
-        let Some(c) = input.read() else { return Ok(None); };
+    -> Result<Option<(Loc<char>, bool)>, Option<Loc<LexerError>>> {
+        let Some(c) = input.read() else { Err(None)? };
         if c.0 == '\n' { input.unread(c); return Ok(None); }
         if c.0 != '\\' { return Ok(Some((c, false))); }
         let mut loc = c.1;
         // We've read a backslash.
-        if let Some(c2) = input.read() {
-            loc.end = c2.1.end;
-            match c2.0 {
-                '0' => { return Ok(Some((Loc('\0', loc), true))) },
-                't' => { return Ok(Some((Loc('\t', loc), true))) },
-                'n' => { return Ok(Some((Loc('\n', loc), true))) },
-                'r' => { return Ok(Some((Loc('\r', loc), true))) },
-                '"' => { return Ok(Some((Loc('"', loc), true))) },
-                '\'' => { return Ok(Some((Loc('\'', loc), true))) },
-                '\\' => { return Ok(Some((Loc('\\', loc), true))) },
-                'x' => { return Ok(Some((self.lex_hex(loc, input, 2)?, true))) },
-                'u' => { return Ok(Some((self.lex_hex(loc, input, 4)?, true))) },
-                _ => { input.unread(c); loc = c.1; },
-            }
-        }
-        Err(Loc(MISSING_SEQUENCE, loc))?
+        let Some(c2) = input.read() else { Err(None)? };
+        loc.end = c2.1.end;
+        let ret: char = match c2.0 {
+            '0' => '\0',
+            't' => '\t',
+            'n' => '\n',
+            'r' => '\r',
+            '"' => '"',
+            '\'' => '\'',
+            '\\' => '\\',
+            'x' => { return Ok(Some((self.lex_hex(loc, input, 2)?, true))) },
+            'u' => { return Ok(Some((self.lex_hex(loc, input, 4)?, true))) },
+            _ => { Err(Loc(MISSING_SEQUENCE, loc))? },
+        };
+        Ok(Some((Loc(ret, loc), true)))
     }
+
     /// Parse a character literal, starting after the initial `'`.
     /// - quote - the [`Location`] of the initial `'`.
     fn lex_char_literal(&self, quote: Location, input: &mut impl Stream<Item=Loc<char>>)
-    -> Result<Loc<Lexeme>, Option<Loc<LexerError>>> {
+    -> Result<Option<Loc<Lexeme>>, Option<Loc<LexerError>>> {
         let mut loc = quote;
         let Some((c, is_escaped)) = self.lex_char(input)? else { Err(Loc(MISSING_CHAR, loc))? };
         loc.end = c.1.end;
         if c.0 == '\'' && !is_escaped { Err(Loc(MISSING_CHAR, loc))? }
-        let Some(c2) = input.read() else { Err(Loc(UNTERMINATED_CHAR, loc))? };
-        if c2.0 != '\'' { input.unread(c2); Err(Loc(UNTERMINATED_CHAR, loc))? }
+        let Some(c2) = input.read() else { Err(None)? };
         loc.end = c2.1.end;
-        Ok(Loc(Lexeme::Atom(Atom::CharLiteral(c.0)), loc))
+        if c2.0 != '\'' { Err(Loc(UNTERMINATED_CHAR, loc))? }
+        Ok(Some(Loc(Lexeme::Atom(Atom::CharLiteral(c.0)), loc)))
     }
 
     /// Parse a string literal, starting after the initial `"`.
     /// - quote - the [`Location`] of the initial `"`.
     fn lex_str_literal(&self, quote: Location, input: &mut impl Stream<Item=Loc<char>>)
-    -> Result<Loc<Lexeme>, Option<Loc<LexerError>>> {
+    -> Result<Option<Loc<Lexeme>>, Option<Loc<LexerError>>> {
         let mut loc = quote;
         let mut s = String::new();
         loop {
@@ -219,50 +213,48 @@ impl Lexer {
             if c.0 == '"' && !is_escaped { break; }
             s.push(c.0);
         }
-        Ok(Loc(Lexeme::Atom(Atom::StrLiteral(s.into())), loc))
+        Ok(Some(Loc(Lexeme::Atom(Atom::StrLiteral(s.into())), loc)))
     }
 
     /// Parse a line comment, starting after the initial `//`.
     /// - slash - the [`Location`] of the initial `/`.
     fn lex_line_comment(&self, slash: Location, input: &mut impl Stream<Item=Loc<char>>)
-    -> Result<Loc<Lexeme>, Option<Loc<LexerError>>> {
+    -> Result<Option<Loc<Lexeme>>, Option<Loc<LexerError>>> {
         let mut loc = slash;
-        while let Some(c) = input.read() {
+        loop {
+            let Some(c) = input.read() else { Err(None)? };
             if c.0 == '\n' { break; }
             loc.end = c.1.end;
         }
-        Ok(Loc(Lexeme::Comment(Comment), loc))
+        Ok(Some(Loc(Lexeme::Comment(Comment), loc)))
     }
 
     /// Parse a line comment, starting after the initial `/*`.
     /// - slash - the [`Location`] of the initial `/`.
     fn lex_block_comment(&self, slash: Location, input: &mut impl Stream<Item=Loc<char>>)
-    -> Result<Loc<Lexeme>, Option<Loc<LexerError>>> {
+    -> Result<Option<Loc<Lexeme>>, Option<Loc<LexerError>>> {
         let mut loc = slash;
         loop {
-            let Some(c) = input.read() else {
-                // E.g. `EndOfFile`.
-                return Err(Some(Loc(UNTERMINATED_BLOCK_COMMENT, loc)));
-            };
+            let Some(c) = input.read() else { Err(None)? };
             if c.0 == '*' {
-                if let Some(c2) = input.read() {
-                    if c2.0 == '/' {
-                        loc.end = c2.1.end;
-                        return Ok(Loc(Lexeme::Comment(Comment), loc))
-                    }
-                    input.unread(c2);
+                let Some(c2) = input.read() else { Err(None)? };
+                if c2.0 == '/' {
+                    loc.end = c2.1.end;
+                    break;
                 }
+                input.unread(c2);
             }
-            loc.end = c.1.end;
         }
+        Ok(Some(Loc(Lexeme::Comment(Comment), loc)))
     }
 
     /// Parse an operator keyword starting with `c`.
     fn lex_operator(&self, c: Loc<char>, input: &mut impl Stream<Item=Loc<char>>)
-    -> Result<Loc<Lexeme>, Option<Loc<LexerError>>> {
+    -> Result<Option<Loc<Lexeme>>, Option<Loc<LexerError>>> {
         let mut loc = c.1;
         let mut buffer = String::from(c.0);
-        while let Some(c) = input.read() {
+        loop {
+            let Some(c) = input.read() else { Err(None)? };
             if is_operator_char(c.0) {
                 buffer.push(c.0);
                 loc.end = c.1.end;
@@ -271,19 +263,21 @@ impl Lexer {
                 break;
             }
         }
-        if let Some(ret) = self.keywords.get(buffer.as_str()) {
-            Ok(Loc(ret.clone(), loc))
+        let ret = if let Some(ret) = self.keywords.get(buffer.as_str()) {
+            ret.clone()
         } else {
-            Err(Some(Loc(BAD_OPERATOR, loc)))
-        }
+            Err(Loc(BAD_OPERATOR, loc))?
+        };
+        Ok(Some(Loc(ret, loc)))
     }
 
     /// Parse an identifier or integer or alphabetic keyword starting with `c`.
     fn lex_alphanumeric(&self, c: Loc<char>, input: &mut impl Stream<Item=Loc<char>>)
-    -> Result<Loc<Lexeme>, Option<Loc<LexerError>>> {
+    -> Result<Option<Loc<Lexeme>>, Option<Loc<LexerError>>> {
         let mut loc = c.1;
         let mut buffer = String::from(c.0);
-        while let Some(c) = input.read() {
+        loop {
+            let Some(c) = input.read() else { Err(None)? };
             if is_alphanumeric_char(c.0) {
                 buffer.push(c.0);
                 loc.end = c.1.end;
@@ -292,11 +286,12 @@ impl Lexer {
                 break;
             }
         }
-        if let Some(ret) = self.keywords.get(buffer.as_str()) {
-            Ok(Loc(ret.clone(), loc))
+        let ret = if let Some(ret) = self.keywords.get(buffer.as_str()) {
+            ret.clone()
         } else {
-            Ok(Loc(Lexeme::Atom(Atom::Alphanumeric(buffer.into())), loc))
-        }
+            Lexeme::Atom(Atom::Alphanumeric(buffer.into()))
+        };
+        Ok(Some(Loc(ret, loc)))
     }
 
     /// Parse a [`Lexeme`].
@@ -308,38 +303,36 @@ impl Lexer {
     pub fn lex(&self, input: &mut impl Stream<Item=Loc<char>>)
     -> Result<Option<Loc<Lexeme>>, Option<Loc<LexerError>>> {
         let Some(c) = input.read() else { Err(None)? };
-        Ok(Some(match c.0 {
+        let l: Lexeme = match c.0 {
             '\t' | '\n' | '\r' | ' ' => { return Ok(None); },
-            '\'' => { self.lex_char_literal(c.1, input)? },
-            '\"' => { self.lex_str_literal(c.1, input)? },
-            ',' => { Loc(Lexeme::Separator(Separator::Comma), c.1) },
-            ';' => { Loc(Lexeme::Separator(Separator::Semicolon), c.1) },
-            '(' => { Loc(Lexeme::Open(BracketKind::Round), c.1) },
-            ')' => { Loc(Lexeme::Close(BracketKind::Round), c.1) },
-            '[' => { Loc(Lexeme::Open(BracketKind::Square), c.1) },
-            ']' => { Loc(Lexeme::Close(BracketKind::Square), c.1) },
-            '{' => { Loc(Lexeme::Open(BracketKind::Curly), c.1) },
-            '}' => { Loc(Lexeme::Close(BracketKind::Curly), c.1) },
+            '\'' => { return self.lex_char_literal(c.1, input); },
+            '\"' => { return self.lex_str_literal(c.1, input); },
+            ',' => Lexeme::Separator(Separator::Comma),
+            ';' => Lexeme::Separator(Separator::Semicolon),
+            '(' => Lexeme::Open(BracketKind::Round),
+            ')' => Lexeme::Close(BracketKind::Round),
+            '[' => Lexeme::Open(BracketKind::Square),
+            ']' => Lexeme::Close(BracketKind::Square),
+            '{' => Lexeme::Open(BracketKind::Curly),
+            '}' => Lexeme::Close(BracketKind::Curly),
             '/' => {
-                if let Some(c2) = input.read() {
-                    match c2.0 {
-                        '/' => { self.lex_line_comment(c2.1, input)? },
-                        '*' => { self.lex_block_comment(c2.1, input)? },
-                        _ => {
-                            input.unread(c2);
-                            self.lex_operator(c, input)?
-                        },
-                    }
-                } else {
-                    self.lex_operator(c, input)?
+                let Some(c2) = input.read() else { Err(None)? };
+                match c2.0 {
+                    '/' => { return self.lex_line_comment(c.1, input); },
+                    '*' => { return self.lex_block_comment(c.1, input); },
+                    _ => {
+                        input.unread(c2);
+                        return self.lex_operator(c, input);
+                    },
                 }
             },
             _ => {
-                if is_operator_char(c.0) { self.lex_operator(c, input)? }
-                else if is_alphanumeric_char(c.0) { self.lex_alphanumeric(c, input)? }
+                if is_operator_char(c.0) { return self.lex_operator(c, input); }
+                else if is_alphanumeric_char(c.0) { return self.lex_alphanumeric(c, input); }
                 else { Err(Loc(ILLEGAL, c.1))? }
             },
-        }))
+        };
+        Ok(Some(Loc(l, c.1)))
     }
 }
 
