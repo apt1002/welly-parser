@@ -33,7 +33,7 @@ pub struct Doc<T>(pub T, pub List<Comment>);
 impl Doc<Item> {
     /// Parse a [`Item`] preceded by zero or more [`Comment`]s.
     pub fn parse(input: &mut impl Stream<Item=Loc<Lexeme>>)
-    -> Result<Self, Option<Loc<ParserError>>> {
+    -> Result<Option<Self>, Option<Loc<ParserError>>> {
         let mut docs = Vec::new();
         loop {
             let Some(l) = input.read() else { Err(None)? };
@@ -42,7 +42,7 @@ impl Doc<Item> {
                 _ => { input.unread(l); break; },
             }
         }
-        Ok(Self(Item::parse(input)?, docs.into()))
+        Ok(Item::parse(input)?.map(|ret| Self(ret, docs.into())))
     }
 }
 
@@ -251,9 +251,9 @@ impl Item {
 
     /// Parse a [`Self`].
     pub fn parse(input: &mut impl Stream<Item=Loc<Lexeme>>)
-    -> Result<Self, Option<Loc<ParserError>>> {
+    -> Result<Option<Self>, Option<Loc<ParserError>>> {
         let l = read_non_comment(input)?;
-        Ok(match &l.0 {
+        let ret: Self = match &l.0 {
             Lexeme::Atom(_) | Lexeme::Op(_) | Lexeme::Open(BK::Round) | Lexeme::Open(BK::Square) | Lexeme::Assign(_) => {
                 input.unread(l);
                 let lhs = Formula::parse(Precedence::MIN, input)?;
@@ -290,8 +290,9 @@ impl Item {
                 Self::Block(block)
             },
             Lexeme::Separator(sep) => { Self::Separator(Loc(*sep, l.1)) },
-            _ => { Err(Loc(MISSING_ITEM, l.1))? },
-        })
+            _ => { return Ok(None); },
+        };
+        Ok(Some(ret))
     }
 }
 
@@ -354,6 +355,6 @@ pub fn parse_bracket(open: Loc<BK>, input: &mut impl Stream<Item=Loc<Lexeme>>)
             _ => {},
         }
         input.unread(l);
-        contents.push(Doc::parse(input)?);
+	if let Some(item) = Doc::parse(input)? { contents.push(item); }
     }
 }

@@ -42,8 +42,9 @@ pub fn run(output: &mut impl Write, lexer: &Lexer, source_code: &str, start_pos:
     let mut items = Vec::new();
     let mut lexeme_stream = IteratorStream::from(lexemes.into_iter());
     while !lexeme_stream.is_empty() {
-        let Doc(item, _) = Doc::parse(&mut lexeme_stream)?;
-        items.push(item);
+        if let Some(Doc(item, _)) = Doc::parse(&mut lexeme_stream)? {
+            items.push(item);
+        }
     }
     // let valid_items = items.into_iter().map(|item| item::validate(item)).collect();
     for item in items {
