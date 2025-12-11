@@ -1,0 +1,349 @@
+use std::rc::{Rc};
+
+use super::{enums, loc, parser, lexer, Validate, Name, Tag, Pattern, Stmt, Block};
+use enums::{Separator, Op};
+use loc::{Location, Loc, Locate};
+use parser::{Doc, Formula, Item};
+use lexer::{Atom};
+
+pub const BAD_SELECTOR: &'static str = "Expected a field selector";
+pub const STMT_NOT_EXPR: &'static str = "This statement does not have a value";
+pub const BAD_ALPHANUMERIC: &'static str = "This is not an identifier, a tag or an integer";
+pub const MISSING_COMMA: &'static str = "Expected a comma after this expression";
+
+// ----------------------------------------------------------------------------
+
+/// Identifies a field or a tuple of fields, or removes a [`Tag`].
+#[derive(Debug, Clone)]
+pub enum Selector {
+    /// By name.
+    Name(Loc<Name>),
+
+    /// By position.
+    Index(Loc<i64>),
+
+    /// A tuple of fields.
+    Tuple(Loc<Box<[Selector]>>)
+}
+
+impl Selector {
+    /// Checks that `expr` is a valid [`Selector`].
+    fn from_expr(expr: Expr) -> loc::Result<Self> {
+        let ret = match expr {
+            Expr::Name(name) => Self::Name(name),
+            Expr::Int(index) => Self::Index(index),
+            Expr::Tuple(contents) => {
+                let mut selectors = Vec::new();
+                for expr in contents.0 { selectors.push(Self::from_expr(expr)?); }
+                Self::Tuple(Loc(selectors.into(), contents.1))
+            },
+            e => { Err(Loc(BAD_SELECTOR, e.loc()))? },
+        };
+        Ok(ret)
+    }
+}
+
+impl Locate for Selector {
+    fn loc_start(&self) -> usize {
+        match self {
+            Self::Name(name) => name.loc_start(),
+            Self::Index(index) => index.loc_start(),
+            Self::Tuple(tuple) => tuple.loc_start(),
+        }
+    }
+
+    fn loc_end(&self) -> usize {
+        match self {
+            Self::Name(name) => name.loc_end(),
+            Self::Index(index) => index.loc_end(),
+            Self::Tuple(tuple) => tuple.loc_end(),
+        }
+    }
+}
+
+impl<T> Validate<T> for Selector where Expr: Validate<T> {
+    fn validate(tree: &T) -> loc::Result<Self> { Ok(Self::from_expr(Expr::validate(tree)?)?) }
+}
+
+// ----------------------------------------------------------------------------
+
+#[derive(Debug, Clone)]
+pub enum Expr {
+    /// An `Expr` that binds a `Name`.
+    Named(Loc<Name>, Box<Expr>),
+
+    /// `mod name { ... }` defines a module.
+    ///
+    /// The items in the module are declared inline in the `Block`, if any,
+    /// otherwise they are read from another source file.
+    Module(Location, Loc<Option<Block>>),
+
+    /// `obj name( ... ) { ... }` defines an object type.
+    ///
+    /// [`Name`]s in the patterns become the object's fields.
+    Object(Location, Box<[Pattern]>, Loc<Block>),
+
+    /// `fn name( ... ): ... { ... }` defines a function.
+    ///
+    /// [`Name`]s in the patterns become the function's arguments.
+    Function(Location, Box<[Pattern]>, Option<Box<Expr>>, Loc<Block>),
+
+    /// `macro name( ... ): ... { ... }` defines a macro.
+    ///
+    /// [`Name`]s in the patterns become the macro's arguments.
+    Macro(Location, Box<[Pattern]>, Option<Box<Expr>>, Loc<Block>),
+
+    /// `trait name { ... }` defines a trait.
+    Trait(Location, Loc<Block>),
+
+    /// A literal `char`.
+    Char(Loc<char>),
+
+    /// A literal `str`.
+    Str(Loc<Rc<str>>),
+
+    /// A literal `i64`.
+    Int(Loc<i64>),
+
+    /// A literal [`Tag`].
+    Tag(Loc<Tag>),
+
+    /// Read the value of a `Name`.
+    Name(Loc<Name>),
+
+    /// An `Expr` in brackets.
+    Group(Loc<Box<Expr>>),
+
+    /// `( ... )` constructs a tuple.
+    Tuple(Loc<Box<[Expr]>>),
+
+    /// `[ ... ]` constructs a tuple type.
+    TupleType(Loc<Box<[Expr]>>),
+
+    /// `expr.TAG` removes `TAG` from `expr` otherwise does `match expr`.
+    When(Box<Expr>, Loc<Tag>),
+
+    /// `expr.name` reads field `name` of `expr`.
+    Dot(Box<Expr>, Selector),
+
+    /// `expr op expr` applies `op` to up to two operands.
+    Op(Option<Box<Expr>>, Loc<Op>, Option<Box<Expr>>),
+
+    /// `expr( ... )` calls `expr` passing arguments.
+    Call(Box<Expr>, Loc<Box<[Expr]>>),
+}
+
+impl Expr {
+    /// Optionally wrap `self` in `Self::Named`.
+    fn named(self, name: Option<Loc<Name>>) -> Self {
+        if let Some(name) = name { Self::Named(name, Box::new(self)) } else { self }
+    }
+
+    /// Construct a `Self::Object`.
+    fn object(word: Location, args: impl Into<Box<[Pattern]>>, body: Loc<Block>) -> Self {
+        Self::Object(word, args.into(), body)
+    }
+
+    /// Construct a `Self::Function`.
+    fn function(word: Location, args: impl Into<Box<[Pattern]>>, return_type: impl Into<Option<Self>>, body: Loc<Block>) -> Self {
+        Self::Function(word, args.into(), return_type.into().map(Box::new), body)
+    }
+
+    /// Construct a `Self::Macro`.
+    fn macro_(word: Location, args: impl Into<Box<[Pattern]>>, return_type: impl Into<Option<Self>>, body: Loc<Block>) -> Self {
+        Self::Macro(word, args.into(), return_type.into().map(Box::new), body)
+    }
+
+    /// Construct a `Self::Group`.
+    fn group(expr: Loc<Self>) -> Self { Self::Group(Loc(Box::new(expr.0), expr.1)) }
+
+    /// Construct a `Self::Tuple`.
+    fn tuple(args: Loc<impl Into<Box<[Expr]>>>) -> Self { Self::Tuple(Loc(args.0.into(), args.1)) }
+
+    /// Construct a `Self::TupleType`.
+    fn tuple_type(args: Loc<impl Into<Box<[Expr]>>>) -> Self { Self::TupleType(Loc(args.0.into(), args.1)) }
+
+    /// Construct a `Self::When`.
+    fn when(expr: Self, tag: Loc<Tag>) -> Self { Self::When(Box::new(expr), tag) }
+
+    /// Construct a `Self::Dot`.
+    fn dot(expr: Self, selector: Selector) -> Self { Self::Dot(Box::new(expr), selector) }
+
+    /// Construct a `Self::Op`.
+    fn op(left: impl Into<Option<Self>>, op: Loc<Op>, right: impl Into<Option<Self>>) -> Self {
+        Self::Op(left.into().map(Box::new), op, right.into().map(Box::new))
+    }
+
+    /// Construct a `Self::Call`.
+    fn call(expr: Self, args: Loc<impl Into<Box<[Self]>>>) -> Self { Self::Call(Box::new(expr), Loc(args.0.into(), args.1)) }
+}
+
+impl Locate for Expr {
+    fn loc_start(&self) -> usize {
+        match self {
+            Self::Named(_, expr) => expr.loc_start(),
+            Self::Module(word, _) => word.loc_start(),
+            Self::Object(word, _, _) => word.loc_start(),
+            Self::Function(word, _, _, _) => word.loc_start(),
+            Self::Macro(word, _, _, _) => word.loc_start(),
+            Self::Trait(word, _) => word.loc_start(),
+            Self::Char(c) => c.loc_start(),
+            Self::Str(s) => s.loc_start(),
+            Self::Int(i) => i.loc_start(),
+            Self::Tag(tag) => tag.loc_start(),
+            Self::Name(name) => name.loc_start(),
+            Self::Group(expr) => expr.loc_start(),
+            Self::Tuple(exprs) => exprs.loc_start(),
+            Self::TupleType(types) => types.loc_start(),
+            Self::When(expr, _) => expr.loc_start(),
+            Self::Dot(expr, _) => expr.loc_start(),
+            Self::Op(Some(expr), _, _) => expr.loc_start(),
+            Self::Op(None, op, _) => op.loc_start(),
+            Self::Call(expr, _) => expr.loc_start(),
+        }
+    }
+
+    fn loc_end(&self) -> usize {
+        match self {
+            Self::Named(_, expr) => expr.loc_end(),
+            Self::Module(_, block) => block.loc_end(),
+            Self::Object(_, _, block) => block.loc_end(),
+            Self::Function(_, _, _, block) => block.loc_end(),
+            Self::Macro(_, _, _, block) => block.loc_end(),
+            Self::Trait(_, block) => block.loc_end(),
+            Self::Char(c) => c.loc_end(),
+            Self::Str(s) => s.loc_end(),
+            Self::Int(i) => i.loc_end(),
+            Self::Tag(tag) => tag.loc_end(),
+            Self::Name(name) => name.loc_end(),
+            Self::Group(expr) => expr.loc_end(),
+            Self::Tuple(exprs) => exprs.loc_end(),
+            Self::TupleType(types) => types.loc_end(),
+            Self::When(_, tag) => tag.loc_end(),
+            Self::Dot(_, selector) => selector.loc_end(),
+            Self::Op(_, _, Some(expr)) => expr.loc_end(),
+            Self::Op(_, op, None) => op.loc_end(),
+            Self::Call(_, args) => args.loc_end(),
+        }
+    }
+}
+
+impl Validate<Loc<Atom>> for Expr {
+    fn validate(tree: &Loc<Atom>) -> loc::Result<Self> {
+        let ret = match &tree.0 {
+            Atom::CharLiteral(c) => Self::Char(Loc(*c, tree.1)),
+            Atom::StrLiteral(s) => Self::Str(Loc(s.clone(), tree.1)),
+            Atom::Alphanumeric(s) => {
+                if let Some(tag) = Tag::new(s) { Self::Tag(Loc(tag, tree.1)) }
+                else if let Some(name) = Name::new(s) { Self::Name(Loc(name, tree.1)) }
+                else if let Ok(int) = s.parse::<i64>() { Self::Int(Loc(int, tree.1)) }
+                else if let Ok(int) = s.parse::<u64>() { Self::Int(Loc(int as i64, tree.1)) }
+                else { Err(Loc(BAD_ALPHANUMERIC, tree.1))? }
+            },
+        };
+        Ok(ret)
+    }
+}
+
+impl Validate<Formula> for Expr {
+    fn validate(tree: &Formula) -> loc::Result<Self> {
+        let ret = match tree {
+            Formula::Atom(atom) => Self::validate(atom)?,
+            Formula::RoundGroup(bracket) => {
+                match CommaSeparated::validate(&bracket.0)?.number() {
+                    Number::One(expr) => Self::group(Loc(expr, bracket.1)),
+                    Number::Many(exprs) => Self::tuple(Loc(exprs, bracket.1)),
+                }
+            },
+            Formula::SquareGroup(bracket) => {
+                match CommaSeparated::validate(&bracket.0)?.number() {
+                    Number::One(expr) => Self::group(Loc(expr, bracket.1)),
+                    Number::Many(exprs) => Self::tuple_type(Loc(exprs, bracket.1)),
+                }
+            },
+            Formula::Op(left, op, right) => {
+                let left = Option::<Expr>::validate(left)?;
+                let right = Option::<Expr>::validate(right)?;
+                match op.0 {
+                    Op::Dot => {
+                        let left = left.expect("Dot has a left operand");
+                        let right = right.expect("Dot has a right operand");
+                        if let Expr::Tag(tag) = right {
+                            Self::when(left, tag)
+                        } else {
+                            Self::dot(left, Selector::from_expr(right)?)
+                        }
+                    },
+                    _ => {
+                        Self::op(left, *op, right)
+                    },
+                }
+            }
+            Formula::RoundCall(function, bracket) => {
+                let function = Expr::validate(&**function)?;
+                let contents = CommaSeparated::validate(&bracket.0)?;
+                Self::call(function, Loc(contents.0, bracket.1))
+            }
+            Formula::SquareCall(function, bracket) => {
+                let function = Expr::validate(&**function)?;
+                let contents = CommaSeparated::validate(&bracket.0)?;
+                Self::call(function, Loc(contents.0, bracket.1))
+            }
+        };
+        Ok(ret)
+    }
+}
+
+impl Validate<Item> for Expr {
+    fn validate(tree: &Item) -> loc::Result<Self> {
+        let ret = match Stmt::validate(tree)? {
+            Stmt::Expr(expr) => expr,
+            s => { Err(Loc(STMT_NOT_EXPR, s.loc()))? },
+        };
+        Ok(ret)
+    }
+}
+
+impl Validate<Doc<Item>> for Expr {
+    fn validate(tree: &Doc<Item>) -> loc::Result<Self> { Ok(Self::validate(&tree.0)?) }
+}
+
+// ----------------------------------------------------------------------------
+
+/// The return type of `CommaSeparated::number()`.
+pub enum Number {
+    /// One [`Expr`] not followed by a comma.
+    One(Expr),
+
+    /// Zero or two or more [`Expr`]s, or one followed by a comma.
+    Many(Box<[Expr]>),
+}
+
+/// Zero or more `V`s, separated by commas, and optionally followed by a comma.
+struct CommaSeparated(Box<[Expr]>, bool);
+
+impl CommaSeparated {
+    /// Distinguish a tuple from a group.
+    fn number(self) -> Number {
+        if self.1 || self.0.len() != 1 { return Number::Many(self.0); }
+        Number::One(self.0.into_iter().next().expect("Already checked"))
+    }
+}
+
+impl Validate<[Doc<Item>]> for CommaSeparated {
+    fn validate(tree: &[Doc<Item>]) -> loc::Result<Self> {
+        let mut contents = Vec::new();
+        let mut has_comma = true;
+        let mut iter = tree.iter();
+        while let Some(item) = iter.next() {
+            let value = Expr::validate(item)?;
+            match iter.next() {
+                None => { has_comma = false; break; },
+                Some(Doc(Item::Separator(Loc(Separator::Comma, _)), _)) => {},
+                _ => { Err(Loc(MISSING_COMMA, value.loc()))? },
+            }
+            contents.push(value);
+        }
+        Ok(Self(contents.into(), has_comma))
+    }
+}
