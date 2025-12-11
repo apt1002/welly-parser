@@ -1,6 +1,6 @@
 use std::{fmt};
 
-use super::loc::{self, Location, Loc, List};
+use super::loc::{self, Location, Loc, List, Report};
 use super::stream::{Stream};
 use super::{enums, lexer};
 use enums::{Separator, BracketKind as BK, Op, Precedence, OpInfo, ItemWord};
@@ -332,6 +332,16 @@ impl fmt::Debug for Item {
 
 // ----------------------------------------------------------------------------
 
+/// An open bracket does not match a close bracket.
+struct MismatchedBracket {open: Location, close: Location}
+
+impl Report for MismatchedBracket {
+    fn report(&self, log: &mut dyn FnMut(&str, Option<Location>)) {
+        log(MISMATCHED_BRACKET, Some(self.open));
+        log(MISMATCHED_BRACKET, Some(self.close));
+    }
+}
+
 /// Represents a sequence of [`Item`] inside brackets.
 type Bracket = Box<[Doc<Item>]>;
 
@@ -348,8 +358,7 @@ pub fn parse_bracket(open: Loc<BK>, input: &mut impl Stream<Item=Loc<Lexeme>>)
                     let loc = Location {start: open.1.start, end: l.1.end};
                     return Ok(Loc(contents.into(), loc));
                 } else {
-                    // TODO: Report both mismatched brackets.
-                    Err(Loc(MISMATCHED_BRACKET, l.1))?
+                    Err(MismatchedBracket {open: open.1, close: l.1})?
                 }
             },
             _ => {},
