@@ -2,7 +2,7 @@ use std::{io};
 use io::{BufRead, Write};
 use ansi_term::Colour::{Red};
 
-use welly_parser::loc::{self, Location, Loc};
+use welly_parser::loc::{self, Location, Loc, Locate};
 use welly_parser::stream::{Stream, IteratorStream, CharIterator};
 use welly_parser::lexer::{Lexer};
 use welly_parser::parser::{Doc};

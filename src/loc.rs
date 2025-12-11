@@ -43,6 +43,32 @@ impl<T: fmt::Debug> fmt::Debug for Loc<T> {
 
 // ----------------------------------------------------------------------------
 
+/// Find the [`Location`] of `Self`.
+pub trait Locate {
+    /// Returns a [`Location`] spanning the whole of `Self`.
+    fn loc(&self) -> Location { Location{start: self.loc_start(), end: self.loc_end()} }
+
+    /// Used to compute `self.loc().start`.
+    fn loc_start(&self) -> usize;
+
+    /// Used to compute `self.loc().end`.
+    fn loc_end(&self) -> usize;
+}
+
+impl Locate for Location {
+    fn loc(&self) -> Location { *self }
+    fn loc_start(&self) -> usize { self.start }
+    fn loc_end(&self) -> usize { self.end }
+}
+
+impl<T> Locate for Loc<T> {
+    fn loc(&self) -> Location { self.1 }
+    fn loc_start(&self) -> usize { self.1.start }
+    fn loc_end(&self) -> usize { self.1.end }
+}
+
+// ----------------------------------------------------------------------------
+
 /// A list of [`Loc<T>`]s.
 #[derive(Clone)]
 pub struct List<T>(Box<[Loc<T>]>);

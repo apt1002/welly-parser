@@ -1,6 +1,6 @@
 use std::{fmt};
 
-use super::loc::{self, Location, Loc, List, Report};
+use super::loc::{self, Location, Loc, Locate, List, Report};
 use super::stream::{Stream};
 use super::{enums, lexer};
 use enums::{Separator, BracketKind as BK, Op, Precedence, OpInfo, ItemWord};
@@ -71,12 +71,9 @@ pub enum Formula {
     SquareCall(Box<Formula>, Loc<Bracket>),
 }
 
-impl Formula {
-    /// Returns a [`Location`] spanning `Self`.
-    pub fn loc(&self) -> Location { Location {start: self.loc_start(), end: self.loc_end()} }
-
+impl Locate for Formula {
     /// Used to compute `self.loc().start`.
-    pub fn loc_start(&self) -> usize {
+    fn loc_start(&self) -> usize {
         match self {
             Self::Atom(l) => l.1.start,
             Self::RoundGroup(l) => l.1.start,
@@ -89,7 +86,7 @@ impl Formula {
     }
 
     /// Used to compute `self.loc().end`.
-    pub fn loc_end(&self) -> usize {
+    fn loc_end(&self) -> usize {
         match self {
             Self::Atom(l) => l.1.end,
             Self::RoundGroup(l) => l.1.end,
@@ -100,7 +97,9 @@ impl Formula {
             Self::SquareCall(_, l) => l.1.end,
         }
     }
+}
 
+impl Formula {
     /// Parse an optional [`Self`] containing operators whose left
     /// [`Precedence`] exceeds `limit`.
     ///
@@ -229,23 +228,34 @@ pub enum Item {
     Block(Loc<Bracket>)
 }
 
-impl Item {
-    /// Returns a [`Location`] encompassing `Self`.
-    pub fn loc(&self) -> Location {
+impl Locate for Item {
+    fn loc_start(&self) -> usize {
         match self {
-            Self::Separator(separator) => separator.1,
-            Self::Eval(expr) => expr.loc(),
-            Self::Assign(Some(pattern), _, Some(expr)) => Location {start: pattern.loc_start(), end: expr.loc_end()},
-            Self::Assign(Some(pattern), op, None) => Location {start: pattern.loc_start(), end: op.1.end},
-            Self::Assign(None, op, Some(expr)) => Location {start: op.1.start, end: expr.loc_end()},
-            Self::Assign(None, op, None) => op.1,
-            Self::Verb(word, Some(expr)) => Location {start: word.1.start, end: expr.loc_end()},
-            Self::Verb(word, None) => word.1,
-            Self::Control(word, _expr, block) => Location {start: word.1.start, end: block.1.end},
-            Self::Block(block) => block.1,
+            Self::Separator(separator) => separator.loc_start(),
+            Self::Eval(expr) => expr.loc_start(),
+            Self::Assign(Some(pattern), _, _) => pattern.loc_start(),
+            Self::Assign(None, op, _) => op.loc_start(),
+            Self::Verb(word, _) => word.loc_start(),
+            Self::Control(word, _, _) => word.loc_start(),
+            Self::Block(block) => block.loc_start(),
         }
     }
 
+    fn loc_end(&self) -> usize {
+        match self {
+            Self::Separator(separator) => separator.1.end,
+            Self::Eval(expr) => expr.loc_end(),
+            Self::Assign(_, _, Some(expr)) => expr.loc_end(),
+            Self::Assign(_, op, None) => op.loc_end(),
+            Self::Verb(_, Some(expr)) => expr.loc_end(),
+            Self::Verb(word, None) => word.loc_end(),
+            Self::Control(_, _, block) => block.loc_end(),
+            Self::Block(block) => block.loc_end(),
+        }
+    }
+}
+
+impl Item {
     /// Parse a [`Self`].
     pub fn parse(input: &mut impl Stream<Item=Loc<Lexeme>>)
     -> loc::Result<Option<Self>> {
