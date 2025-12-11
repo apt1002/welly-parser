@@ -1,25 +1,22 @@
 use std::{fmt};
 
-use super::loc::{Location, Loc, List};
+use super::loc::{self, Location, Loc, List};
 use super::stream::{Stream};
 use super::{enums, lexer};
 use enums::{Separator, BracketKind as BK, Op, Precedence, OpInfo, ItemWord};
 use lexer::{Comment, Atom, Lexeme};
 
-/// The error type of the `parse_xxx()` functions.
-type ParserError = &'static str;
-
-pub const MISSING_ITEM: ParserError = "Expected an item";
-pub const MISMATCHED_BRACKET: ParserError = "Mismatched bracket";
-pub const MISSING_LEFT: ParserError = "Missing formula before this operator";
-pub const MISSING_RIGHT: ParserError = "Missing formula after this operator";
-pub const MISSING_OP: ParserError = "Missing operator before this formula";
+pub const MISSING_ITEM: &'static str = "Expected an item";
+pub const MISMATCHED_BRACKET: &'static str = "Mismatched bracket";
+pub const MISSING_LEFT: &'static str = "Missing formula before this operator";
+pub const MISSING_RIGHT: &'static str = "Missing formula after this operator";
+pub const MISSING_OP: &'static str = "Missing operator before this formula";
 
 /// Convenience method for discarding [`Lexeme::Comment`]s.
 fn read_non_comment(input: &mut impl Stream<Item=Loc<Lexeme>>)
--> Result<Loc<Lexeme>, Option<Loc<ParserError>>> {
+-> Result<Loc<Lexeme>, loc::Error> {
     loop {
-        let Some(l) = input.read() else { Err(None)? };
+        let l = input.read()?;
         if !matches!(&l.0, Lexeme::Comment(_)) { return Ok(l); }
     }
 }
@@ -33,10 +30,10 @@ pub struct Doc<T>(pub T, pub List<Comment>);
 impl Doc<Item> {
     /// Parse a [`Item`] preceded by zero or more [`Comment`]s.
     pub fn parse(input: &mut impl Stream<Item=Loc<Lexeme>>)
-    -> Result<Option<Self>, Option<Loc<ParserError>>> {
+    -> Result<Option<Self>, loc::Error> {
         let mut docs = Vec::new();
         loop {
-            let Some(l) = input.read() else { Err(None)? };
+            let l = input.read()?;
             match &l.0 {
                 Lexeme::Comment(comment) => { docs.push(Loc(comment.clone(), l.1)); },
                 _ => { input.unread(l); break; },
@@ -109,7 +106,7 @@ impl Formula {
     ///
     /// Use `Precedence::MIN` for `limit` to parse a complete `Self`.
     pub fn parse(limit: Precedence, input: &mut impl Stream<Item=Loc<Lexeme>>)
-    -> Result<Option<Self>, Option<Loc<ParserError>>> {
+    -> Result<Option<Self>, loc::Error> {
         // Parse an initial [`Self`].
         let l = read_non_comment(input)?;
         let mut ret = match &l.0 {
@@ -164,7 +161,7 @@ impl Formula {
     /// Given an optional left operand, an operator, and its right
     /// [`Precedence`] (if any) Parse the right operand (if any).
     fn parse_operand(left: Option<Self>, op: Loc<Op>, right: Option<Precedence>, input: &mut impl Stream<Item=Loc<Lexeme>>)
-    -> Result<Self, Option<Loc<ParserError>>> {
+    -> Result<Self, loc::Error> {
         let right = if let Some(right) = right {
             Some(Self::parse(right, input)?.ok_or(Loc(MISSING_RIGHT, op.1))?)
         } else {
@@ -251,7 +248,7 @@ impl Item {
 
     /// Parse a [`Self`].
     pub fn parse(input: &mut impl Stream<Item=Loc<Lexeme>>)
-    -> Result<Option<Self>, Option<Loc<ParserError>>> {
+    -> Result<Option<Self>, loc::Error> {
         let l = read_non_comment(input)?;
         let ret: Self = match &l.0 {
             Lexeme::Atom(_) | Lexeme::Op(_) | Lexeme::Open(BK::Round) | Lexeme::Open(BK::Square) | Lexeme::Assign(_) => {
@@ -290,7 +287,10 @@ impl Item {
                 Self::Block(block)
             },
             Lexeme::Separator(sep) => { Self::Separator(Loc(*sep, l.1)) },
-            _ => { return Ok(None); },
+            _ => {
+                input.unread(l);
+                return Ok(None);
+            },
         };
         Ok(Some(ret))
     }
@@ -338,7 +338,7 @@ type Bracket = Box<[Doc<Item>]>;
 /// Parse a [`Bracket`] starting after the open bracket.
 /// - open - the open bracket.
 pub fn parse_bracket(open: Loc<BK>, input: &mut impl Stream<Item=Loc<Lexeme>>)
--> Result<Loc<Bracket>, Option<Loc<ParserError>>> {
+-> Result<Loc<Bracket>, loc::Error> {
     let mut contents = Vec::new();
     loop {
         let l = read_non_comment(input)?;

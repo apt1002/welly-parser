@@ -66,3 +66,44 @@ impl<T: fmt::Debug> fmt::Debug for List<T> {
 impl<T, U> From<U> for List<T> where Box<[Loc<T>]>: From<U> {
     fn from(value: U) -> Self { Self(value.into()) }
 }
+
+// ----------------------------------------------------------------------------
+
+/// Report a complicated error to the user.
+pub trait Report {
+    /// Report `self` by calling `log()` one or more times.
+    fn report(&self, log: &mut dyn FnMut(&str, Option<Location>));
+}
+
+/// The type of errors with source-code locations.
+pub enum Error {
+    /// The parser treid to read beyond the end of the input.
+    ///
+    /// If the input is complete, this is an error.
+    /// Otherwise it indicates that we need more input from the user.
+    InsufficientInput,
+
+    /// Many errors have a constant message and just one [`Location`].
+    Str(&'static str, Location),
+
+    /// Catch-all for complicated cases.
+    Report(Box<dyn Report>),
+}
+
+impl Error {
+    pub fn report(&self, mut log: impl FnMut(&str, Option<Location>)) {
+        match self {
+            Self::InsufficientInput => log("The program ends unexpectedly", None),
+            Self::Str(message, loc) => log(message, Some(*loc)),
+            Self::Report(e) => e.report(&mut log),
+        }
+    }
+}
+
+impl From<Loc<&'static str>> for Error {
+    fn from(value: Loc<&'static str>) -> Self { Self::Str(value.0, value.1) }
+}
+
+impl<R: Report + 'static> From<R> for Error {
+    fn from(value: R) -> Self { Self::Report(Box::new(value)) }
+}

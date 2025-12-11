@@ -1,12 +1,12 @@
-use super::loc::{Location, Loc};
+use super::loc::{self, Location, Loc};
 
 /// A stream of items.
 pub trait Stream {
     /// The return type of `read()`.
     type Item;
 
-    /// Read the next item, if any.
-    fn read(&mut self) -> Option<Self::Item>;
+    /// Read the next item, or raise [`loc::Error::InsufficientInput`].
+    fn read(&mut self) -> Result<Self::Item, loc::Error>;
 
     /// Unread `item`. The next call to `read()` will return `item`.
     ///
@@ -17,7 +17,7 @@ pub trait Stream {
 
     /// Returns `true` if there are no more [`Self::Item`]s to `read()`.
     fn is_empty(&mut self) -> bool {
-        if let Some(item) = self.read() {
+        if let Ok(item) = self.read() {
             self.unread(item);
             false
         } else {
@@ -28,7 +28,7 @@ pub trait Stream {
 
 impl<'a, S: Stream> Stream for &'a mut S {
     type Item = S::Item;
-    fn read(&mut self) -> Option<Self::Item> { S::read(*self) }
+    fn read(&mut self) -> Result<Self::Item, loc::Error> { S::read(*self) }
     fn unread(&mut self, item: Self::Item) { S::unread(*self, item) }
     fn is_empty(&mut self) -> bool { S::is_empty(*self) }
 }
@@ -52,10 +52,8 @@ impl<I: IntoIterator> From<I> for IteratorStream<I::IntoIter> {
 impl<I: Iterator> Stream for IteratorStream<I> {
     type Item = I::Item;
 
-    fn read(&mut self) -> Option<Self::Item> {
-        if let Some(item) = self.item.take() { return Some(item); }
-        let Some(item) = self.iter.next() else { return None; };
-        Some(item)
+    fn read(&mut self) -> Result<Self::Item, loc::Error> {
+        self.item.take().or_else(|| self.iter.next()).ok_or(loc::Error::InsufficientInput)
     }
 
     fn unread(&mut self, item: Self::Item) {
