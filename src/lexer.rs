@@ -142,7 +142,7 @@ impl Lexer {
     /// - escape - the [`Location`] of the backslash.
     /// - num_digits - the number of hexadecimal digits required.
     fn lex_hex(&self, escape: Location, input: &mut impl Stream<Item=Loc<char>>, num_digits: usize)
-    -> Result<Loc<char>, loc::Error> {
+    -> loc::Result<Loc<char>> {
         let mut ret: u32 = 0;
         let mut loc = escape;
         for i in 0..num_digits {
@@ -161,7 +161,7 @@ impl Lexer {
     /// - `true` if it was escaped.
     /// Returns an error if there is an invalid escape sequence.
     fn lex_char(&self, input: &mut impl Stream<Item=Loc<char>>)
-    -> Result<Option<(Loc<char>, bool)>, loc::Error> {
+    -> loc::Result<Option<(Loc<char>, bool)>> {
         let c = input.read()?;
         if c.0 == '\n' { input.unread(c); return Ok(None); }
         if c.0 != '\\' { return Ok(Some((c, false))); }
@@ -187,7 +187,7 @@ impl Lexer {
     /// Parse a character literal, starting after the initial `'`.
     /// - quote - the [`Location`] of the initial `'`.
     fn lex_char_literal(&self, quote: Location, input: &mut impl Stream<Item=Loc<char>>)
-    -> Result<Option<Loc<Lexeme>>, loc::Error> {
+    -> loc::Result<Option<Loc<Lexeme>>> {
         let mut loc = quote;
         let Some((c, is_escaped)) = self.lex_char(input)? else { Err(Loc(MISSING_CHAR, loc))? };
         loc.end = c.1.end;
@@ -201,7 +201,7 @@ impl Lexer {
     /// Parse a string literal, starting after the initial `"`.
     /// - quote - the [`Location`] of the initial `"`.
     fn lex_str_literal(&self, quote: Location, input: &mut impl Stream<Item=Loc<char>>)
-    -> Result<Option<Loc<Lexeme>>, loc::Error> {
+    -> loc::Result<Option<Loc<Lexeme>>> {
         let mut loc = quote;
         let mut s = String::new();
         loop {
@@ -216,7 +216,7 @@ impl Lexer {
     /// Parse a line comment, starting after the initial `//`.
     /// - slash - the [`Location`] of the initial `/`.
     fn lex_line_comment(&self, slash: Location, input: &mut impl Stream<Item=Loc<char>>)
-    -> Result<Option<Loc<Lexeme>>, loc::Error> {
+    -> loc::Result<Option<Loc<Lexeme>>> {
         let mut loc = slash;
         loop {
             let c = input.read()?;
@@ -229,7 +229,7 @@ impl Lexer {
     /// Parse a line comment, starting after the initial `/*`.
     /// - slash - the [`Location`] of the initial `/`.
     fn lex_block_comment(&self, slash: Location, input: &mut impl Stream<Item=Loc<char>>)
-    -> Result<Option<Loc<Lexeme>>, loc::Error> {
+    -> loc::Result<Option<Loc<Lexeme>>> {
         let mut loc = slash;
         loop {
             let c = input.read()?;
@@ -247,7 +247,7 @@ impl Lexer {
 
     /// Parse an operator keyword starting with `c`.
     fn lex_operator(&self, c: Loc<char>, input: &mut impl Stream<Item=Loc<char>>)
-    -> Result<Option<Loc<Lexeme>>, loc::Error> {
+    -> loc::Result<Option<Loc<Lexeme>>> {
         let mut loc = c.1;
         let mut buffer = String::from(c.0);
         loop {
@@ -270,7 +270,7 @@ impl Lexer {
 
     /// Parse an identifier or integer or alphabetic keyword starting with `c`.
     fn lex_alphanumeric(&self, c: Loc<char>, input: &mut impl Stream<Item=Loc<char>>)
-    -> Result<Option<Loc<Lexeme>>, loc::Error> {
+    -> loc::Result<Option<Loc<Lexeme>>> {
         let mut loc = c.1;
         let mut buffer = String::from(c.0);
         loop {
@@ -298,7 +298,7 @@ impl Lexer {
     /// - Err(None) - stream is empty.
     /// - Err(Some(e)) - found an error `e`.
     pub fn lex(&self, input: &mut impl Stream<Item=Loc<char>>)
-    -> Result<Option<Loc<Lexeme>>, loc::Error> {
+    -> loc::Result<Option<Loc<Lexeme>>> {
         let c = input.read()?;
         let l: Lexeme = match c.0 {
             '\t' | '\n' | '\r' | ' ' => { return Ok(None); },

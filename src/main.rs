@@ -34,7 +34,7 @@ pub fn report(output: &mut impl Write, source: &str, msg: &str, loc: Option<Loca
 /// Lex, parse, and execute `source_code` starting at `start_pos`.
 /// Update `start_pos` if successful.
 pub fn run(output: &mut impl Write, lexer: &Lexer, source_code: &str, start_pos: &mut usize)
--> Result<(), loc::Error> {
+-> loc::Result<()> {
     // Lex.
     let mut lexemes = Vec::new();
     let mut char_stream = IteratorStream::from(CharIterator::new(source_code, *start_pos));

@@ -107,3 +107,8 @@ impl From<Loc<&'static str>> for Error {
 impl<R: Report + 'static> From<R> for Error {
     fn from(value: R) -> Self { Self::Report(Box::new(value)) }
 }
+
+// ----------------------------------------------------------------------------
+
+/// An abbreviation.
+pub type Result<T> = std::result::Result<T, Error>;
