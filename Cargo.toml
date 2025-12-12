@@ -2,14 +2,14 @@
 name = "welly-parser"
 version = "0.3.0"
 authors = ["Alistair Turnbull <welly@minworks.co.uk>"]
-rust-version = "1.63" # The version in Debian Bookworm.
+rust-version = "1.85" # The version in Debian Bookworm.
 description = "An artisanal parser for the Welly programming language"
 homepage = "https://wellylang.org"
 repository = "https://github.com/apt1002/welly-parser"
 license = "BSD-2-Clause"
 keywords = ["parser", "welly"]
 categories = ["compilers", "parsing"]
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 ansi_term = "=0.12.1"
