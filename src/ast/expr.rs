@@ -130,7 +130,7 @@ pub enum Expr {
     Op(Option<Box<Expr>>, Loc<Op>, Option<Box<Expr>>),
 
     /// `expr( ... )` calls `expr` passing arguments.
-    Call(Box<Expr>, Loc<Box<[Expr]>>),
+    Call(Box<Expr>, Box<Expr>),
 }
 
 impl Expr {
@@ -175,7 +175,7 @@ impl Expr {
     }
 
     /// Construct a `Self::Call`.
-    fn call(expr: Self, args: Loc<impl Into<Box<[Self]>>>) -> Self { Self::Call(Box::new(expr), Loc(args.0.into(), args.1)) }
+    fn call(function: Self, arg: Self) -> Self { Self::Call(Box::new(function), Box::new(arg)) }
 }
 
 impl Locate for Expr {
@@ -281,13 +281,19 @@ impl Validate<Formula> for Expr {
             }
             Formula::RoundCall(function, bracket) => {
                 let function = Expr::validate(&**function)?;
-                let contents = CommaSeparated::validate(&bracket.0)?;
-                Self::call(function, Loc(contents.0, bracket.1))
+                let arg = match CommaSeparated::validate(&bracket.0)?.number() {
+                    Number::One(expr) => Self::group(Loc(expr, bracket.1)),
+                    Number::Many(exprs) => Self::tuple(Loc(exprs, bracket.1)),
+                };
+                Self::call(function, arg)
             }
             Formula::SquareCall(function, bracket) => {
                 let function = Expr::validate(&**function)?;
-                let contents = CommaSeparated::validate(&bracket.0)?;
-                Self::call(function, Loc(contents.0, bracket.1))
+                let arg = match CommaSeparated::validate(&bracket.0)?.number() {
+                    Number::One(expr) => Self::group(Loc(expr, bracket.1)),
+                    Number::Many(exprs) => Self::tuple(Loc(exprs, bracket.1)),
+                };
+                Self::call(function, arg)
             }
         };
         Ok(ret)
