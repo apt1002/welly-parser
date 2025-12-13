@@ -6,12 +6,13 @@ use loc::{Location, Loc, Locate};
 use parser::{Doc, Item};
 
 pub const BAD_NAME: &'static str = "Expected a name";
-pub const BAD_CALL: &'static str = "Expected `( ... )`";
+pub const BAD_CALL: &'static str = "Expected ( ... )";
 pub const MISSING_LHS: &'static str = "Expected a pattern before this assignment operator";
 pub const MISSING_RHS: &'static str = "Expected an expression after this assignment operator";
 pub const MISSING_NAME: &'static str = "Expected a name after this keyword";
 pub const MISSING_EXPR: &'static str = "Expected an expression after this keyword";
 pub const MISSING_BLOCK: &'static str = "Expected { ... } after this statement";
+pub const EXTRA_BLOCK: &'static str = "Unexpected { ... }";
 pub const MISSING_STMT: &'static str = "Expected a statement";
 pub const MISSING_SEMICOLON: &'static str = "This statement must be followed by a semicolon";
 
@@ -64,6 +65,15 @@ pub enum Stmt {
     /// Illegal outside an object.
     Implementation(Location, Box<Expr>, Loc<Block>),
 
+    /// `return expr` returns from a function.
+    /// `expr` is optional.
+    ///
+    /// Illegal outside a function.
+    Return(Location, Option<Box<Expr>>),
+
+    /// `match expr` jumps to a `case`.
+    Match(Location, Box<Expr>),
+
     /// `{ ... }` executes the statements in the `Block`.
     Block(Loc<Block>),
 }
@@ -78,6 +88,14 @@ impl Stmt {
     pub fn implementation(word: Location, trait_: Expr, block: Loc<Block>) -> Self {
         Self::Implementation(word, Box::new(trait_), block)
     }
+
+    /// Construct a `Self::Return`.
+    pub fn return_(word: Location, expr: impl Into<Option<Expr>>) -> Self {
+        Self::Return(word, expr.into().map(Box::new))
+    }
+
+    /// Construct a `Self::Match`.
+    pub fn match_(word: Location, expr: Expr) -> Self { Self::Match(word, Box::new(expr)) }
 }
 
 impl Locate for Stmt {
@@ -86,6 +104,8 @@ impl Locate for Stmt {
             Self::Expr(expr) => expr.loc_start(),
             Self::Assign(lhs, _, _) => lhs.loc_start(),
             Self::Implementation(word, _, _) => word.loc_start(),
+            Self::Return(word, _) => word.loc_start(),
+            Self::Match(word, _) => word.loc_start(),
             Self::Block(block) => block.loc_start(),
         }
     }
@@ -95,6 +115,9 @@ impl Locate for Stmt {
             Self::Expr(expr) => expr.loc_end(),
             Self::Assign(_, _, rhs) => rhs.loc_end(),
             Self::Implementation(_, _, block) => block.loc_end(),
+            Self::Return(_, Some(expr)) => expr.loc_end(),
+            Self::Return(word, None) => word.loc_end(),
+            Self::Match(_, expr) => expr.loc_end(),
             Self::Block(block) => block.loc_end(),
         }
     }
@@ -145,8 +168,15 @@ impl Validate<Item> for Stmt {
                         let Some(block) = block else { Err(Loc(MISSING_BLOCK, tree.loc()))? };
                         Self::implementation(word.1, expr, block)
                     },
-                    ItemWord::Return => todo!(),
-                    ItemWord::Match => todo!(),
+                    ItemWord::Return => {
+                        if let Some(block) = block { Err(Loc(EXTRA_BLOCK, block.1))? }
+                        Self::return_(word.1, expr)
+                    },
+                    ItemWord::Match => {
+                        let Some(expr) = expr else { Err(Loc(MISSING_EXPR, word.1))? };
+                        if let Some(block) = block { Err(Loc(EXTRA_BLOCK, block.1))? }
+                        Self::match_(word.1, expr)
+                    },
                     ItemWord::Case => todo!(),
                     ItemWord::If => todo!(),
                     ItemWord::While => todo!(),
