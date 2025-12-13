@@ -76,7 +76,7 @@ pub enum Expr {
     ///
     /// The items in the module are declared inline in the `Block`, if any,
     /// otherwise they are read from another source file.
-    Module(Location, Loc<Option<Block>>),
+    Module(Location, Option<Loc<Block>>),
 
     /// `obj name( ... ) { ... }` defines an object type.
     ///
@@ -135,47 +135,47 @@ pub enum Expr {
 
 impl Expr {
     /// Optionally wrap `self` in `Self::Named`.
-    fn named(self, name: Option<Loc<Name>>) -> Self {
-        if let Some(name) = name { Self::Named(name, Box::new(self)) } else { self }
+    pub fn named(self, name: impl Into<Option<Loc<Name>>>) -> Self {
+        if let Some(name) = name.into() { Self::Named(name, Box::new(self)) } else { self }
     }
 
     /// Construct a `Self::Object`.
-    fn object(word: Location, args: impl Into<Box<[Pattern]>>, body: Loc<Block>) -> Self {
+    pub fn object(word: Location, args: impl Into<Box<[Pattern]>>, body: Loc<Block>) -> Self {
         Self::Object(word, args.into(), body)
     }
 
     /// Construct a `Self::Function`.
-    fn function(word: Location, args: impl Into<Box<[Pattern]>>, return_type: impl Into<Option<Self>>, body: Loc<Block>) -> Self {
+    pub fn function(word: Location, args: impl Into<Box<[Pattern]>>, return_type: impl Into<Option<Self>>, body: Loc<Block>) -> Self {
         Self::Function(word, args.into(), return_type.into().map(Box::new), body)
     }
 
     /// Construct a `Self::Macro`.
-    fn macro_(word: Location, args: impl Into<Box<[Pattern]>>, return_type: impl Into<Option<Self>>, body: Loc<Block>) -> Self {
+    pub fn macro_(word: Location, args: impl Into<Box<[Pattern]>>, return_type: impl Into<Option<Self>>, body: Loc<Block>) -> Self {
         Self::Macro(word, args.into(), return_type.into().map(Box::new), body)
     }
 
     /// Construct a `Self::Group`.
-    fn group(expr: Loc<Self>) -> Self { Self::Group(Loc(Box::new(expr.0), expr.1)) }
+    pub fn group(expr: Loc<Self>) -> Self { Self::Group(Loc(Box::new(expr.0), expr.1)) }
 
     /// Construct a `Self::Tuple`.
-    fn tuple(args: Loc<impl Into<Box<[Expr]>>>) -> Self { Self::Tuple(Loc(args.0.into(), args.1)) }
+    pub fn tuple(args: Loc<impl Into<Box<[Expr]>>>) -> Self { Self::Tuple(Loc(args.0.into(), args.1)) }
 
     /// Construct a `Self::TupleType`.
-    fn tuple_type(args: Loc<impl Into<Box<[Expr]>>>) -> Self { Self::TupleType(Loc(args.0.into(), args.1)) }
+    pub fn tuple_type(args: Loc<impl Into<Box<[Expr]>>>) -> Self { Self::TupleType(Loc(args.0.into(), args.1)) }
 
     /// Construct a `Self::When`.
-    fn when(expr: Self, tag: Loc<Tag>) -> Self { Self::When(Box::new(expr), tag) }
+    pub fn when(self, tag: Loc<Tag>) -> Self { Self::When(Box::new(self), tag) }
 
     /// Construct a `Self::Dot`.
-    fn dot(expr: Self, selector: Selector) -> Self { Self::Dot(Box::new(expr), selector) }
+    pub fn dot(self, selector: Selector) -> Self { Self::Dot(Box::new(self), selector) }
 
     /// Construct a `Self::Op`.
-    fn op(left: impl Into<Option<Self>>, op: Loc<Op>, right: impl Into<Option<Self>>) -> Self {
+    pub fn op(left: impl Into<Option<Self>>, op: Loc<Op>, right: impl Into<Option<Self>>) -> Self {
         Self::Op(left.into().map(Box::new), op, right.into().map(Box::new))
     }
 
     /// Construct a `Self::Call`.
-    fn call(function: Self, arg: Self) -> Self { Self::Call(Box::new(function), Box::new(arg)) }
+    pub fn call(self, arg: Self) -> Self { Self::Call(Box::new(self), Box::new(arg)) }
 }
 
 impl Locate for Expr {
@@ -205,8 +205,12 @@ impl Locate for Expr {
 
     fn loc_end(&self) -> usize {
         match self {
-            Self::Named(_, expr) => expr.loc_end(),
-            Self::Module(_, block) => block.loc_end(),
+            Self::Named(name, expr) => match &**expr {
+                Self::Module(_, None) => name.loc_end(),
+                _ => expr.loc_end(),
+            },
+            Self::Module(_, Some(block)) => block.loc_end(),
+            Self::Module(word, None) => word.loc_end(), // Shouldn't happen.
             Self::Object(_, _, block) => block.loc_end(),
             Self::Function(_, _, _, block) => block.loc_end(),
             Self::Macro(_, _, _, block) => block.loc_end(),
@@ -269,9 +273,9 @@ impl Validate<Formula> for Expr {
                         let left = left.expect("Dot has a left operand");
                         let right = right.expect("Dot has a right operand");
                         if let Expr::Tag(tag) = right {
-                            Self::when(left, tag)
+                            left.when(tag)
                         } else {
-                            Self::dot(left, Selector::from_expr(right)?)
+                            left.dot(Selector::from_expr(right)?)
                         }
                     },
                     _ => {
@@ -285,7 +289,7 @@ impl Validate<Formula> for Expr {
                     Number::One(expr) => Self::group(Loc(expr, bracket.1)),
                     Number::Many(exprs) => Self::tuple(Loc(exprs, bracket.1)),
                 };
-                Self::call(function, arg)
+                function.call(arg)
             }
             Formula::SquareCall(function, bracket) => {
                 let function = Expr::validate(&**function)?;
@@ -293,11 +297,15 @@ impl Validate<Formula> for Expr {
                     Number::One(expr) => Self::group(Loc(expr, bracket.1)),
                     Number::Many(exprs) => Self::tuple(Loc(exprs, bracket.1)),
                 };
-                Self::call(function, arg)
+                function.call(arg)
             }
         };
         Ok(ret)
     }
+}
+
+impl Validate<Box<Formula>> for Expr {
+    fn validate(tree: &Box<Formula>) -> loc::Result<Self> { Ok(Self::validate(&**tree)?) }
 }
 
 impl Validate<Item> for Expr {

@@ -1,5 +1,3 @@
-use std::ops::{Deref};
-
 use super::{enums, loc, lexer, parser};
 use loc::{Loc};
 
@@ -10,9 +8,9 @@ pub trait Validate<T: ?Sized>: Sized {
     fn validate(tree: &T) -> loc::Result<Self>;
 }
 
-impl<T: Deref, V: Validate<<T as Deref>::Target>> Validate<Option<T>> for Option<V> {
+impl<T, V: Validate<T>> Validate<Option<T>> for Option<V> {
     fn validate(tree: &Option<T>) -> loc::Result<Self> {
-        Ok(if let Some(tree) = tree { Some(V::validate(tree)?) } else { None })
+        Ok(if let Some(tree) = tree { Some(V::validate(&tree)?) } else { None })
     }
 }
 

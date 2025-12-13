@@ -1,12 +1,13 @@
 use std::{fmt};
 
-use super::{enums, loc, parser, Validate, Expr, Pattern};
-use enums::{Op, Separator};
+use super::{enums, loc, parser, Validate, Name, Expr, Pattern};
+use enums::{Separator, Op, ItemWord};
 use loc::{Location, Loc, Locate};
 use parser::{Doc, Item};
 
 pub const MISSING_LHS: &'static str = "Expected a pattern before this assignment operator";
 pub const MISSING_RHS: &'static str = "Expected an expression after this assignment operator";
+pub const MISSING_NAME: &'static str = "Expected a name after this keyword";
 pub const MISSING_STMT: &'static str = "Expected a statement";
 pub const MISSING_SEMICOLON: &'static str = "This statement must be followed by a semicolon";
 
@@ -73,9 +74,49 @@ impl Validate<Item> for Stmt {
                 let rhs = Expr::validate(rhs)?;
                 Self::Assign(lhs, *op, rhs)
             },
-            Item::Verb(_, _) => todo!(),
-            Item::Control(_, _, _) => todo!(),
-            Item::Block(bracket) => Stmt::Block(Loc::validate(bracket)?),
+            Item::Verb(word, formula) => {
+                match word.0 {
+                    ItemWord::Module => {
+                        let Some(formula) = formula else { Err(Loc(MISSING_NAME, word.1))? };
+                        let name = Loc::<Name>::validate(formula)?;
+                        Self::Expr(Expr::Module(word.1, None).named(name))
+                    },
+                    ItemWord::Object => todo!(),
+                    ItemWord::Function => todo!(),
+                    ItemWord::Macro => todo!(),
+                    ItemWord::Trait => todo!(),
+                    ItemWord::Implementation => todo!(),
+                    ItemWord::Return => todo!(),
+                    ItemWord::Match => todo!(),
+                    ItemWord::Case => todo!(),
+                    ItemWord::If => todo!(),
+                    ItemWord::While => todo!(),
+                    ItemWord::For => todo!(),
+                    ItemWord::Else => todo!(),
+                }
+            },
+            Item::Control(word, formula, bracket) => {
+                match word.0 {
+                    ItemWord::Module => {
+                        let name = Option::<Loc<Name>>::validate(formula)?;
+                        let block = Loc::<Block>::validate(bracket)?;
+                        Self::Expr(Expr::Module(word.1, Some(block)).named(name))
+                    },
+                    ItemWord::Object => todo!(),
+                    ItemWord::Function => todo!(),
+                    ItemWord::Macro => todo!(),
+                    ItemWord::Trait => todo!(),
+                    ItemWord::Implementation => todo!(),
+                    ItemWord::Return => todo!(),
+                    ItemWord::Match => todo!(),
+                    ItemWord::Case => todo!(),
+                    ItemWord::If => todo!(),
+                    ItemWord::While => todo!(),
+                    ItemWord::For => todo!(),
+                    ItemWord::Else => todo!(),
+                }
+            },
+            Item::Block(bracket) => Stmt::Block(Loc::<Block>::validate(bracket)?),
             _ => { Err(Loc(MISSING_STMT, tree.loc()))? },
         };
         Ok(ret)
