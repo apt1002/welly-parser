@@ -134,8 +134,17 @@ impl Validate<Item> for Stmt {
                         let parameter = Pattern::from_expr(expr)?;
                         Self::Expr(Expr::function(*word, parameter, return_type, block).named(name))
                     },
-                    ItemWord::Trait => todo!(),
-                    ItemWord::Implementation => todo!(),
+                    ItemWord::Trait => {
+                        let Some(expr) = expr else { Err(Loc(MISSING_NAME, word.1))? };
+                        let name = to_name(expr)?;
+                        let Some(block) = block else { Err(Loc(MISSING_BLOCK, tree.loc()))? };
+                        Self::Expr(Expr::Trait(word.1, block).named(name))
+                    },
+                    ItemWord::Implementation => {
+                        let Some(expr) = expr else { Err(Loc(MISSING_NAME, word.1))? };
+                        let Some(block) = block else { Err(Loc(MISSING_BLOCK, tree.loc()))? };
+                        Self::implementation(word.1, expr, block)
+                    },
                     ItemWord::Return => todo!(),
                     ItemWord::Match => todo!(),
                     ItemWord::Case => todo!(),
