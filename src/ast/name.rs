@@ -1,6 +1,20 @@
 use std::{fmt};
 use std::rc::{Rc};
 
+fn is_identifier(s: &str) -> bool {
+    if !matches!(s.chars().next(), Some('A' .. 'Z' | 'a' .. 'z' | '_')) { return false; }
+    if !s.chars().all(|c| matches!(c, '0' .. '9' | 'A' .. 'Z' | 'a' .. 'z' | '_')) { return false; }
+    return true;
+}
+
+/// Given `is_identifier(s)`, tests whether `s` is of the required form to be a
+/// `Tag`.
+fn is_tag(s: &str) -> bool {
+    if s.len() < 2 { return false; }
+    if !s.chars().all(|c| matches!(c, 'A' .. 'Z' | '_')) { return false; }
+    return true;
+}
+
 // ----------------------------------------------------------------------------
 
 /// An identifier for a value.
@@ -12,9 +26,7 @@ pub struct Name(Rc<str>);
 
 impl Name {
     pub fn new(s: &Rc<str>) -> Option<Self> {
-        if !matches!(s.chars().next(), Some('A' .. 'Z' | 'a' .. 'z' | '_')) { return None; }
-        if !s.chars().all(|c| matches!(c, '0' .. '9' | 'A' .. 'Z' | 'a' .. 'z' | '_')) { return None; }
-        Some(Self(s.clone()))
+        if is_identifier(s) && !is_tag(s) { Some(Self(s.clone())) } else { None }
     }
 }
 
@@ -39,10 +51,7 @@ pub struct Tag(Rc<str>);
 impl Tag {
     /// Construct `Self` from `s` if it is of the required form.
     pub fn new(s: &Rc<str>) -> Option<Self> {
-        if s.len() < 2 { return None; }
-        if !matches!(s.chars().next(), Some('A' .. 'Z')) { return None; }
-        if !s.chars().all(|c| matches!(c, 'A' .. 'Z' | '_')) { return None; }
-        Some(Self(s.clone()))
+        if is_identifier(s) && is_tag(s) { Some(Self(s.clone())) } else { None }
     }
 }
 

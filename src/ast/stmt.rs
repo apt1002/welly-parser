@@ -5,11 +5,46 @@ use enums::{Separator, Op, ItemWord};
 use loc::{Location, Loc, Locate};
 use parser::{Doc, Item};
 
+pub const BAD_NAME: &'static str = "Expected a name";
+pub const BAD_CALL: &'static str = "Expected `( ... )`";
 pub const MISSING_LHS: &'static str = "Expected a pattern before this assignment operator";
 pub const MISSING_RHS: &'static str = "Expected an expression after this assignment operator";
 pub const MISSING_NAME: &'static str = "Expected a name after this keyword";
+pub const MISSING_EXPR: &'static str = "Expected an expression after this keyword";
 pub const MISSING_STMT: &'static str = "Expected a statement";
 pub const MISSING_SEMICOLON: &'static str = "This statement must be followed by a semicolon";
+
+// ----------------------------------------------------------------------------
+
+/// Checks that `expr` is a `Name`.
+fn to_name(expr: Expr) -> loc::Result<Loc<Name>> {
+    let ret = match expr {
+        Expr::Name(name) => name,
+        expr => Err(Loc(BAD_NAME, expr.loc()))?,
+    };
+    Ok(ret)
+}
+
+/// Checks whether `expr` is of the form `expr: type` or just `expr`.
+/// Returns `(name, type)`.
+fn remove_cast(expr: Expr) -> (Expr, Option<Expr>) {
+    match expr {
+        Expr::Op(Some(expr), Loc(Op::Cast, _), Some(return_type)) => (*expr, Some(*return_type)),
+        expr => (expr, None),
+    }
+}
+
+/// Checks whether `expr` is of the form `name(expr)` or just `expr`.
+/// `name`is optional.
+/// `expr` can be an [`Expr::Group`] or an [`Expr::Tuple`].
+fn remove_call(expr: Expr) -> loc::Result<(Option<Loc<Name>>, Expr)> {
+    let (name, expr) = match expr {
+        Expr::Call(name, expr) => (Some(to_name(*name)?), *expr),
+        expr => (None, expr),
+    };
+    if !matches!(&expr, Expr::Group(_) | Expr::Tuple(_)) { Err(Loc(BAD_CALL, expr.loc()))? }
+    Ok((name, expr))
+}
 
 // ----------------------------------------------------------------------------
 
@@ -21,25 +56,26 @@ pub enum Stmt {
 
     /// `pattern op= expr` evaluates the [`Expr`], unpacks it and mutate names
     /// in the [`Pattern`].
-    Assign(Pattern, Loc<Option<Op>>, Expr),
+    Assign(Box<Pattern>, Loc<Option<Op>>, Box<Expr>),
 
     /// `impl trait { ... }` adds a trait implementation to an object.
     ///
     /// Illegal outside an object.
-    Implementation(Location, Expr, Loc<Block>),
+    Implementation(Location, Box<Expr>, Loc<Block>),
 
     /// `{ ... }` executes the statements in the `Block`.
     Block(Loc<Block>),
 }
 
 impl Stmt {
-    fn requires_semicolon(&self) -> bool {
-        match self {
-            Self::Expr(_) => true,
-            Self::Assign(_, _, _) => true,
-            Self::Implementation(_, _, _) => false,
-            Self::Block(_) => false,
-        }
+    /// Construct a `Self::Assign`.
+    pub fn assign(lhs: Pattern, op: Loc<Option<Op>>, rhs: Expr) -> Self {
+        Self::Assign(Box::new(lhs), op, Box::new(rhs))
+    }
+
+    /// Construct a `Self::Implementation`.
+    pub fn implementation(word: Location, trait_: Expr, block: Loc<Block>) -> Self {
+        Self::Implementation(word, Box::new(trait_), block)
     }
 }
 
@@ -72,39 +108,25 @@ impl Validate<Item> for Stmt {
                 let Some(rhs) = rhs else { Err(Loc(MISSING_RHS, op.1))? };
                 let lhs = Pattern::validate(lhs)?;
                 let rhs = Expr::validate(rhs)?;
-                Self::Assign(lhs, *op, rhs)
+                Self::assign(lhs, *op, rhs)
             },
-            Item::Verb(word, formula) => {
+            Item::Verb(word, formula, bracket) => {
+                let expr = Option::<Expr>::validate(formula)?;
+                let block = Option::<Loc<Block>>::validate(bracket)?;
                 match word.0 {
                     ItemWord::Module => {
-                        let Some(formula) = formula else { Err(Loc(MISSING_NAME, word.1))? };
-                        let name = Loc::<Name>::validate(formula)?;
-                        Self::Expr(Expr::Module(word.1, None).named(name))
+                        let name = if let Some(expr) = expr { Some(to_name(expr)?) } else { None };
+                        if name.is_none() && block.is_none() { Err(Loc(MISSING_NAME, word.1))? }
+                        Self::Expr(Expr::Module(word.1, block).named(name))
                     },
                     ItemWord::Object => todo!(),
-                    ItemWord::Function => todo!(),
-                    ItemWord::Macro => todo!(),
-                    ItemWord::Trait => todo!(),
-                    ItemWord::Implementation => todo!(),
-                    ItemWord::Return => todo!(),
-                    ItemWord::Match => todo!(),
-                    ItemWord::Case => todo!(),
-                    ItemWord::If => todo!(),
-                    ItemWord::While => todo!(),
-                    ItemWord::For => todo!(),
-                    ItemWord::Else => todo!(),
-                }
-            },
-            Item::Control(word, formula, bracket) => {
-                match word.0 {
-                    ItemWord::Module => {
-                        let name = Option::<Loc<Name>>::validate(formula)?;
-                        let block = Loc::<Block>::validate(bracket)?;
-                        Self::Expr(Expr::Module(word.1, Some(block)).named(name))
+                    ItemWord::Function | ItemWord::Macro => {
+                        let Some(expr) = expr else { Err(Loc(MISSING_EXPR, word.1))? };
+                        let (expr, return_type) = remove_cast(expr);
+                        let (name, expr) = remove_call(expr)?;
+                        let parameter = Pattern::from_expr(expr)?;
+                        Self::Expr(Expr::function(*word, parameter, return_type, block).named(name))
                     },
-                    ItemWord::Object => todo!(),
-                    ItemWord::Function => todo!(),
-                    ItemWord::Macro => todo!(),
                     ItemWord::Trait => todo!(),
                     ItemWord::Implementation => todo!(),
                     ItemWord::Return => todo!(),
@@ -144,7 +166,7 @@ impl Validate<[Doc<Item>]> for Block {
         let mut iter = tree.iter();
         while let Some(item) = iter.next() {
             let stmt = Stmt::validate(item)?;
-            if stmt.requires_semicolon() {
+            if item.0.requires_semicolon() {
                 match iter.next() {
                     Some(Doc(Item::Separator(Loc(Separator::Semicolon, _)), _)) => {},
                     _ => { Err(Loc(MISSING_SEMICOLON, stmt.loc()))? },

@@ -57,6 +57,9 @@ pub enum Pattern {
     Name(Mode, Loc<Name>),
 
     /// Unpack a tuple's fields.
+    Group(Loc<Box<Pattern>>),
+
+    /// Unpack a tuple's fields.
     Tuple(Loc<Box<[Pattern]>>),
 
     /// `pattern: type` casts the value to `type` then unpacks it.
@@ -81,6 +84,7 @@ impl Pattern {
                 for expr in exprs.0 { patterns.push(Self::from_expr_mode(expr, mode)?); }
                 Self::Tuple(Loc(patterns.into(), exprs.1))
             },
+            Expr::Group(expr) => Self::Group(Loc(Box::new(Self::from_expr_mode(*expr.0, mode)?), expr.1)),
             Expr::Op(None, Loc(Op::Share, _), Some(expr)) => Self::from_expr_mode(*expr, mode.share())?,
             Expr::Op(None, Loc(Op::Lend, _), Some(expr)) => Self::from_expr_mode(*expr, mode.lend())?,
             Expr::Op(Some(expr), Loc(Op::Cast, _), Some(type_)) => {
@@ -105,6 +109,7 @@ impl Locate for Pattern {
     fn loc_start(&self) -> usize {
         match self {
             Self::Name(_, name) => name.loc_start(),
+            Self::Group(expr) => expr.loc_start(),
             Self::Tuple(tuple) => tuple.loc_start(),
             Self::Cast(pattern, _) => pattern.loc_start(),
             Self::Dot(expr, _) => expr.loc_start(),
@@ -114,6 +119,7 @@ impl Locate for Pattern {
     fn loc_end(&self) -> usize {
         match self {
             Self::Name(_, name) => name.loc_end(),
+            Self::Group(expr) => expr.loc_end(),
             Self::Tuple(tuple) => tuple.loc_end(),
             Self::Cast(_, type_) => type_.loc_end(),
             Self::Dot(_, selector) => selector.loc_end(),

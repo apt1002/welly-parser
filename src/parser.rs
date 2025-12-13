@@ -214,15 +214,10 @@ pub enum Item {
     /// `pattern op= expr;` mutates the names in the pattern.
     Assign(Option<Formula>, Loc<Option<Op>>, Option<Formula>),
 
-    /// `keyword expr`
-    ///
-    /// The meaning depends on the keyword. See [`ItemWord`].
-    Verb(Loc<ItemWord>, Option<Formula>),
-
     /// `keyword expr { ... }`.
     ///
     /// The meaning depends on the keyword. See [`ItemWord`].
-    Control(Loc<ItemWord>, Option<Formula>, Loc<Bracket>),
+    Verb(Loc<ItemWord>, Option<Formula>, Option<Loc<Bracket>>),
 
     /// Something enclosed in curly brackets.
     Block(Loc<Bracket>)
@@ -235,8 +230,7 @@ impl Locate for Item {
             Self::Eval(expr) => expr.loc_start(),
             Self::Assign(Some(pattern), _, _) => pattern.loc_start(),
             Self::Assign(None, op, _) => op.loc_start(),
-            Self::Verb(word, _) => word.loc_start(),
-            Self::Control(word, _, _) => word.loc_start(),
+            Self::Verb(word, _, _) => word.loc_start(),
             Self::Block(block) => block.loc_start(),
         }
     }
@@ -247,9 +241,9 @@ impl Locate for Item {
             Self::Eval(expr) => expr.loc_end(),
             Self::Assign(_, _, Some(expr)) => expr.loc_end(),
             Self::Assign(_, op, None) => op.loc_end(),
-            Self::Verb(_, Some(expr)) => expr.loc_end(),
-            Self::Verb(word, None) => word.loc_end(),
-            Self::Control(_, _, block) => block.loc_end(),
+            Self::Verb(_, _, Some(block)) => block.loc_end(),
+            Self::Verb(_, Some(expr), None) => expr.loc_end(),
+            Self::Verb(word, None, None) => word.loc_end(),
             Self::Block(block) => block.loc_end(),
         }
     }
@@ -281,16 +275,11 @@ impl Item {
                 let word = Loc(*word, l.1);
                 let expr = Formula::parse(Precedence::MIN, input)?;
                 let l = read_non_comment(input)?;
-                match &l.0 {
-                    Lexeme::Open(BK::Curly) => {
-                        let block = parse_bracket(Loc(BK::Curly, l.1), input)?;
-                        Self::Control(word, expr, block)
-                    },
-                    _ => {
-                        input.unread(l);
-                        Self::Verb(word, expr)
-                    },
-                }
+                let block = match &l.0 {
+                    Lexeme::Open(BK::Curly) => Some(parse_bracket(Loc(BK::Curly, l.1), input)?),
+                    _ => { input.unread(l); None },
+                };
+                Self::Verb(word, expr, block)
             },
             Lexeme::Open(BK::Curly) => {
                 let block = parse_bracket(Loc(BK::Curly, l.1), input)?;
@@ -304,6 +293,9 @@ impl Item {
         };
         Ok(Some(ret))
     }
+
+    /// Tests whether `self` must be followed by a semicolon.
+    pub fn requires_semicolon(&self) -> bool { !matches!(self, Self::Verb(_, _, Some(_)) | Self::Block(_)) }
 }
 
 impl fmt::Debug for Item {
@@ -318,17 +310,11 @@ impl fmt::Debug for Item {
                 if let Some(right) = right { t.field(right); }
                 t.finish()
             },
-            Self::Verb(word, formula) => {
+            Self::Verb(word, formula, block) => {
                 let mut t = f.debug_tuple("Verb");
                 t.field(word);
-                if let Some(formula) = formula{ t.field(formula); }
-                t.finish()
-            },
-            Self::Control(word, formula, block) => {
-                let mut t = f.debug_tuple("Control");
-                t.field(word);
-                if let Some(formula) = formula{ t.field(formula); }
-                t.field(block);
+                if let Some(formula) = formula { t.field(formula); }
+                if let Some(block) = block { t.field(block); }
                 t.finish()
             },
             Self::Block(bracket) => {

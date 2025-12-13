@@ -1,7 +1,7 @@
 use std::rc::{Rc};
 
 use super::{enums, loc, parser, lexer, Validate, Name, Tag, Pattern, Stmt, Block};
-use enums::{Separator, Op};
+use enums::{Separator, Op, ItemWord};
 use loc::{Location, Loc, Locate};
 use parser::{Doc, Formula, Item};
 use lexer::{Atom};
@@ -67,6 +67,22 @@ impl<T> Validate<T> for Selector where Expr: Validate<T> {
 
 // ----------------------------------------------------------------------------
 
+/// Distinguishes functions from macros.
+#[derive(Debug, Copy, Clone)]
+pub struct IsMacro(pub bool);
+
+impl From<ItemWord> for IsMacro {
+    fn from(value: ItemWord) -> Self {
+        IsMacro(match value {
+            ItemWord::Function => false,
+            ItemWord::Macro => true,
+            _ => panic!("Wrong word"),
+        })
+    }
+}
+
+// ----------------------------------------------------------------------------
+
 #[derive(Debug, Clone)]
 pub enum Expr {
     /// An `Expr` that binds a `Name`.
@@ -81,17 +97,14 @@ pub enum Expr {
     /// `obj name( ... ) { ... }` defines an object type.
     ///
     /// [`Name`]s in the patterns become the object's fields.
-    Object(Location, Box<[Pattern]>, Loc<Block>),
+    Object(Location, Box<Pattern>, Loc<Block>),
 
-    /// `fn name( ... ): ... { ... }` defines a function.
+    /// `fn name(parameter): return_type { body }` defines a function.
+    /// `macro ...` defines a macro.
     ///
+    /// `name`, `return_type` and `body` are optional.
     /// [`Name`]s in the patterns become the function's arguments.
-    Function(Location, Box<[Pattern]>, Option<Box<Expr>>, Loc<Block>),
-
-    /// `macro name( ... ): ... { ... }` defines a macro.
-    ///
-    /// [`Name`]s in the patterns become the macro's arguments.
-    Macro(Location, Box<[Pattern]>, Option<Box<Expr>>, Loc<Block>),
+    Function(Loc<IsMacro>, Box<Pattern>, Option<Box<Expr>>, Option<Loc<Block>>),
 
     /// `trait name { ... }` defines a trait.
     Trait(Location, Loc<Block>),
@@ -140,18 +153,18 @@ impl Expr {
     }
 
     /// Construct a `Self::Object`.
-    pub fn object(word: Location, args: impl Into<Box<[Pattern]>>, body: Loc<Block>) -> Self {
-        Self::Object(word, args.into(), body)
+    pub fn object(word: Location, args: Pattern, body: Loc<Block>) -> Self {
+        Self::Object(word, Box::new(args), body)
     }
 
     /// Construct a `Self::Function`.
-    pub fn function(word: Location, args: impl Into<Box<[Pattern]>>, return_type: impl Into<Option<Self>>, body: Loc<Block>) -> Self {
-        Self::Function(word, args.into(), return_type.into().map(Box::new), body)
-    }
-
-    /// Construct a `Self::Macro`.
-    pub fn macro_(word: Location, args: impl Into<Box<[Pattern]>>, return_type: impl Into<Option<Self>>, body: Loc<Block>) -> Self {
-        Self::Macro(word, args.into(), return_type.into().map(Box::new), body)
+    pub fn function(
+        word: Loc<impl Into<IsMacro>>,
+        parameter: Pattern,
+        return_type: impl Into<Option<Self>>,
+        body: impl Into<Option<Loc<Block>>>,
+    ) -> Self {
+        Self::Function(Loc(word.0.into(), word.1), Box::new(parameter), return_type.into().map(Box::new), body.into())
     }
 
     /// Construct a `Self::Group`.
@@ -184,8 +197,7 @@ impl Locate for Expr {
             Self::Named(_, expr) => expr.loc_start(),
             Self::Module(word, _) => word.loc_start(),
             Self::Object(word, _, _) => word.loc_start(),
-            Self::Function(word, _, _, _) => word.loc_start(),
-            Self::Macro(word, _, _, _) => word.loc_start(),
+            Self::Function(is_macro, _, _, _) => is_macro.loc_start(),
             Self::Trait(word, _) => word.loc_start(),
             Self::Char(c) => c.loc_start(),
             Self::Str(s) => s.loc_start(),
@@ -212,8 +224,9 @@ impl Locate for Expr {
             Self::Module(_, Some(block)) => block.loc_end(),
             Self::Module(word, None) => word.loc_end(), // Shouldn't happen.
             Self::Object(_, _, block) => block.loc_end(),
-            Self::Function(_, _, _, block) => block.loc_end(),
-            Self::Macro(_, _, _, block) => block.loc_end(),
+            Self::Function(_, _, _, Some(body)) => body.loc_end(),
+            Self::Function(_, _, Some(return_type), None) => return_type.loc_end(),
+            Self::Function(_, parameter, None, None) => parameter.loc_end(),
             Self::Trait(_, block) => block.loc_end(),
             Self::Char(c) => c.loc_end(),
             Self::Str(s) => s.loc_end(),
