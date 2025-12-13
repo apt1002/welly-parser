@@ -11,6 +11,7 @@ pub const MISSING_LHS: &'static str = "Expected a pattern before this assignment
 pub const MISSING_RHS: &'static str = "Expected an expression after this assignment operator";
 pub const MISSING_NAME: &'static str = "Expected a name after this keyword";
 pub const MISSING_EXPR: &'static str = "Expected an expression after this keyword";
+pub const MISSING_BLOCK: &'static str = "Expected { ... } after this statement";
 pub const MISSING_STMT: &'static str = "Expected a statement";
 pub const MISSING_SEMICOLON: &'static str = "This statement must be followed by a semicolon";
 
@@ -119,7 +120,13 @@ impl Validate<Item> for Stmt {
                         if name.is_none() && block.is_none() { Err(Loc(MISSING_NAME, word.1))? }
                         Self::Expr(Expr::Module(word.1, block).named(name))
                     },
-                    ItemWord::Object => todo!(),
+                    ItemWord::Object => {
+                        let Some(expr) = expr else { Err(Loc(MISSING_EXPR, word.1))? };
+                        let (name, expr) = remove_call(expr)?;
+                        let parameter = Pattern::from_expr(expr)?;
+                        let Some(block) = block else { Err(Loc(MISSING_BLOCK, tree.loc()))? };
+                        Self::Expr(Expr::object(word.1, parameter, block).named(name))
+                    },
                     ItemWord::Function | ItemWord::Macro => {
                         let Some(expr) = expr else { Err(Loc(MISSING_EXPR, word.1))? };
                         let (expr, return_type) = remove_cast(expr);
