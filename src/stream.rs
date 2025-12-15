@@ -66,16 +66,22 @@ impl<I: Iterator> Stream for IteratorStream<I> {
 
 /// An [`Iterator`] yielding `Loc<char>`.
 pub struct CharIterator<'a> {
+    /// The `char`s to yield.
     remaining: std::str::Chars<'a>,
-    length: usize,
+
+    /// The byte index where `remaining` ends.
+    end_pos: usize,
 }
 
 impl<'a> CharIterator<'a> {
-    pub fn new(source_code: &'a str, start_pos: usize) -> Self {
-        Self {remaining: source_code[start_pos..].chars(), length: source_code.len() }
+    /// - start_pos - the byte index where `source_code` starts.
+    /// - source_code - the `char`s to yield.
+    pub fn new(source_code: Loc<&'a str>) -> Self {
+        assert_eq!(source_code.0.len(), source_code.1.end - source_code.1.start);
+        Self {remaining: source_code.0.chars(), end_pos: source_code.1.end }
     }
 
-    pub fn pos(&self) -> usize { self.length - self.remaining.as_str().len() }
+    pub fn pos(&self) -> usize { self.end_pos - self.remaining.as_str().len() }
 }
 
 impl<'a> Iterator for CharIterator<'a> {

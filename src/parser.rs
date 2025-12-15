@@ -281,11 +281,11 @@ impl Item {
                 };
                 Self::Verb(word, expr, block)
             },
+            Lexeme::Separator(sep) => { Self::Separator(Loc(*sep, l.1)) },
             Lexeme::Open(BK::Curly) => {
                 let block = parse_bracket(Loc(BK::Curly, l.1), input)?;
                 Self::Block(block)
             },
-            Lexeme::Separator(sep) => { Self::Separator(Loc(*sep, l.1)) },
             _ => {
                 input.unread(l);
                 return Ok(None);

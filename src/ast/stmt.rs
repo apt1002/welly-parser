@@ -311,7 +311,7 @@ impl Validate<Item> for StmtOrElse {
 
 /// Zero or more `Stmt`s enclosed in `{ ... }`.
 #[derive(Clone)]
-pub struct Block(Box<[Stmt]>);
+pub struct Block(pub Box<[Stmt]>);
 
 impl fmt::Debug for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.0.fmt(f) }

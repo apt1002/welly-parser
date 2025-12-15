@@ -17,6 +17,18 @@ impl fmt::Debug for Location {
     }
 }
 
+impl std::ops::Add<usize> for Location {
+    type Output = Self;
+
+    fn add(self, rhs: usize) -> Self { Location {start: self.start + rhs, end: self.end + rhs} }
+}
+
+impl std::ops::Sub<usize> for Location {
+    type Output = Self;
+
+    fn sub(self, rhs: usize) -> Self { Location {start: self.start - rhs, end: self.end - rhs} }
+}
+
 // ----------------------------------------------------------------------------
 
 /// Represents a `T` with a [`Location`].
