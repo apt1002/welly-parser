@@ -1,13 +1,17 @@
 use std::{fmt};
 use std::rc::{Rc};
 
-use super::{enums, loc, parser, lexer, Validate, Name, Tag, Pattern, stmt, Stmt, Block};
+use super::{enums, loc, parser, lexer, Validate, Name, Tag, Pattern, Stmt, Block};
 use enums::{Separator, Op, ItemWord};
 use loc::{Location, Loc, Locate};
 use parser::{Doc, Formula, Item};
 use lexer::{Atom};
 
 pub const BAD_SELECTOR: &'static str = "Expected a field selector";
+pub const BAD_NAME: &'static str = "Expected `name`";
+pub const BAD_TAG: &'static str = "Expected `TAG`";
+pub const BAD_IN: &'static str = "Expected `pattern in sequence`";
+pub const BAD_CALL: &'static str = "Expected `( ... )`";
 pub const STMT_NOT_EXPR: &'static str = "This statement does not have a value";
 pub const BAD_ALPHANUMERIC: &'static str = "This is not an identifier, a tag or an integer";
 pub const MISSING_COMMA: &'static str = "Expected a comma after this expression";
@@ -175,6 +179,58 @@ impl Expr {
 
     /// Construct a `Self::Call`.
     pub fn call(self, arg: Self) -> Self { Self::Call(Box::new(self), Box::new(arg)) }
+
+    /// Checks that `self` is a `Name`.
+    pub fn to_name(self) -> loc::Result<Loc<Name>> {
+        let ret = match self{
+            Expr::Name(name) => name,
+            expr => Err(Loc(BAD_NAME, expr.loc()))?,
+        };
+        Ok(ret)
+    }
+
+    /// Checks that `self` is a `Name`.
+    pub fn to_optional_name(name: Option<Self>) -> loc::Result<Option<Loc<Name>>> {
+        Ok(if let Some(name) = name { Some(name.to_name()?) } else { None })
+    }
+
+    /// Checks that `self` is a `Tag`.
+    pub fn to_tag(self) -> loc::Result<Loc<Tag>> {
+        let ret = match self {
+            Expr::Tag(tag) => tag,
+            expr => Err(Loc(BAD_TAG, expr.loc()))?,
+        };
+        Ok(ret)
+    }
+
+    /// Checks that `self` is of the form `pattern in sequence`.
+    pub fn remove_in(self) -> loc::Result<(Pattern, Expr)> {
+        let ret = match self {
+            Expr::Op(Some(pattern), Loc(Op::In, _), Some(sequence)) => (Pattern::from_expr(*pattern)?, *sequence),
+            expr => Err(Loc(BAD_IN, expr.loc()))?,
+        };
+        Ok(ret)
+    }
+
+    /// Checks whether `self` is of the form `expr: type` or just `expr`.
+    /// Returns `(name, type)`.
+    pub fn remove_cast(self) -> (Expr, Option<Expr>) {
+        match self {
+            Expr::Op(Some(expr), Loc(Op::Cast, _), Some(return_type)) => (*expr, Some(*return_type)),
+            expr => (expr, None),
+        }
+    }
+
+    /// Checks whether `expr` is of the form `function(expr)` or just `expr`.
+    /// `expr` can be an [`Expr::Group`] or an [`Expr::Tuple`].
+    pub fn remove_call(self) -> loc::Result<(Option<Expr>, Expr)> {
+        let (function, expr) = match self {
+            Expr::Call(function, expr) => (Some(*function), *expr),
+            expr => (None, expr),
+        };
+        if !matches!(&expr, Expr::Group(_) | Expr::Tuple(_)) { Err(Loc(BAD_CALL, expr.loc()))? }
+        Ok((function, expr))
+    }
 }
 
 impl std::fmt::Debug for Expr {
@@ -330,8 +386,8 @@ impl Validate<Formula> for Expr {
                     Op::Structure => {
                         assert!(left.is_none(), "Structure has no left operand");
                         let right = right.expect("Structure has a right operand");
-                        let (name, right) = stmt::remove_call(right)?;
-                        let name = if let Some(name) = name { Some(stmt::to_name(name)?) } else { None };
+                        let (name, right) = right.remove_call()?;
+                        let name = Self::to_optional_name(name)?;
                         let pattern = Pattern::from_expr(right)?;
                         Self::structure(op.1, pattern).named(name)
                     },

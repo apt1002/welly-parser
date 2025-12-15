@@ -1,14 +1,10 @@
 use std::{fmt};
 
-use super::{enums, loc, parser, Validate, Name, Tag, Expr, Pattern};
+use super::{enums, loc, parser, Validate, Tag, Expr, Pattern};
 use enums::{Separator, Op, ItemWord};
 use loc::{Location, Loc, Locate};
 use parser::{Doc, Item};
 
-pub const BAD_NAME: &'static str = "Expected `name`";
-pub const BAD_TAG: &'static str = "Expected `TAG`";
-pub const BAD_IN: &'static str = "Expected `pattern in sequence`";
-pub const BAD_CALL: &'static str = "Expected `( ... )`";
 pub const MISSING_LHS: &'static str = "Expected a pattern before this assignment operator";
 pub const MISSING_RHS: &'static str = "Expected an expression after this assignment operator";
 pub const MISSING_NAME: &'static str = "Expected `name` after this keyword";
@@ -20,58 +16,6 @@ pub const MISSING_STMT: &'static str = "Expected a statement";
 pub const EXTRA_EXPR: &'static str = "Unexpected expression";
 pub const EXTRA_ELSE: &'static str = "`else` must follow an `if`, `while` or `for` statement";
 pub const MISSING_SEMICOLON: &'static str = "This statement must be followed by `;`";
-
-// ----------------------------------------------------------------------------
-
-// TODO: Make these into methods of `Expr`.
-
-/// Checks that `expr` is a `Name`.
-pub fn to_name(expr: Expr) -> loc::Result<Loc<Name>> {
-    let ret = match expr {
-        Expr::Name(name) => name,
-        expr => Err(Loc(BAD_NAME, expr.loc()))?,
-    };
-    Ok(ret)
-}
-
-/// Checks that `expr` is a `Tag`.
-fn to_tag(expr: Expr) -> loc::Result<Loc<Tag>> {
-    let ret = match expr {
-        Expr::Tag(tag) => tag,
-        expr => Err(Loc(BAD_TAG, expr.loc()))?,
-    };
-    Ok(ret)
-}
-
-/// Checks that`expr` is of the form `pattern in sequence`.
-fn remove_in(expr: Expr) -> loc::Result<(Pattern, Expr)> {
-    let ret = match expr {
-        Expr::Op(Some(pattern), Loc(Op::In, _), Some(sequence)) => (Pattern::from_expr(*pattern)?, *sequence),
-        expr => Err(Loc(BAD_IN, expr.loc()))?,
-    };
-    Ok(ret)
-}
-
-/// Checks whether `expr` is of the form `expr: type` or just `expr`.
-/// Returns `(name, type)`.
-fn remove_cast(expr: Expr) -> (Expr, Option<Expr>) {
-    match expr {
-        Expr::Op(Some(expr), Loc(Op::Cast, _), Some(return_type)) => (*expr, Some(*return_type)),
-        expr => (expr, None),
-    }
-}
-
-/// Checks whether `expr` is of the form `function(expr)` or just `expr`.
-/// `function`is optional.
-/// `expr` can be an [`Expr::Group`] or an [`Expr::Tuple`].
-pub fn remove_call(expr: Expr) -> loc::Result<(Option<Expr>, Expr)> {
-    let (function, expr) = match expr {
-        Expr::Call(function, expr) => (Some(*function), *expr),
-        expr => (None, expr),
-    };
-    if !matches!(&expr, Expr::Group(_) | Expr::Tuple(_)) { Err(Loc(BAD_CALL, expr.loc()))? }
-    Ok((function, expr))
-}
 
 // ----------------------------------------------------------------------------
 
@@ -230,30 +174,30 @@ impl Validate<Item> for StmtOrElse {
                 let block = Option::<Loc<Block>>::validate(bracket)?;
                 match word.0 {
                     ItemWord::Module => {
-                        let name = if let Some(expr) = expr { Some(to_name(expr)?) } else { None };
+                        let name = Expr::to_optional_name(expr)?;
                         if name.is_none() && block.is_none() { Err(Loc(MISSING_NAME, word.1))? }
                         Stmt::Expr(Expr::Module(word.1, block).named(name))
                     },
                     ItemWord::Object => {
                         let Some(expr) = expr else { Err(Loc(MISSING_EXPR, word.1))? };
-                        let (name, expr) = remove_call(expr)?;
+                        let (name, expr) = expr.remove_call()?;
                         let Some(name) = name else { Err(Loc(MISSING_CALL, expr.loc()))? };
-                        let name = to_name(name)?;
+                        let name = name.to_name()?;
                         let parameter = Pattern::from_expr(expr)?;
                         let Some(block) = block else { Err(Loc(MISSING_BLOCK, tree.loc()))? };
                         Stmt::Expr(Expr::object(word.1, parameter, block).named(name))
                     },
                     ItemWord::Function | ItemWord::Macro => {
                         let Some(expr) = expr else { Err(Loc(MISSING_EXPR, word.1))? };
-                        let (expr, return_type) = remove_cast(expr);
-                        let (name, expr) = remove_call(expr)?;
-                        let name = if let Some(name) = name { Some(to_name(name)?) } else { None };
+                        let (expr, return_type) = expr.remove_cast();
+                        let (name, expr) = expr.remove_call()?;
+                        let name = Expr::to_optional_name(name)?;
                         let parameter = Pattern::from_expr(expr)?;
                         Stmt::Expr(Expr::function(*word, parameter, return_type, block).named(name))
                     },
                     ItemWord::Trait => {
                         let Some(expr) = expr else { Err(Loc(MISSING_NAME, word.1))? };
-                        let name = to_name(expr)?;
+                        let name = expr.to_name()?;
                         let Some(block) = block else { Err(Loc(MISSING_BLOCK, tree.loc()))? };
                         Stmt::Expr(Expr::Trait(word.1, block).named(name))
                     },
@@ -273,9 +217,9 @@ impl Validate<Item> for StmtOrElse {
                     },
                     ItemWord::Case => {
                         let Some(expr) = expr else { Err(Loc(MISSING_EXPR, word.1))? };
-                        let (tag, expr) = remove_call(expr)?;
+                        let (tag, expr) = expr.remove_call()?;
                         let Some(tag) = tag else { Err(Loc(MISSING_CALL, expr.loc()))? };
-                        let tag = to_tag(tag)?;
+                        let tag = tag.to_tag()?;
                         let parameter = Pattern::from_expr(expr)?;
                         let Some(block) = block else { Err(Loc(MISSING_BLOCK, tree.loc()))? };
                         Stmt::case(word.1, tag, parameter, block)
@@ -292,7 +236,7 @@ impl Validate<Item> for StmtOrElse {
                     },
                     ItemWord::For => {
                         let Some(expr) = expr else { Err(Loc(MISSING_NAME, word.1))? };
-                        let (pattern, sequence) = remove_in(expr)?;
+                        let (pattern, sequence) = expr.remove_in()?;
                         let Some(block) = block else { Err(Loc(MISSING_BLOCK, tree.loc()))? };
                         Stmt::for_(word.1, pattern, sequence, block)
                     },
