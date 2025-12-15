@@ -319,6 +319,14 @@ impl Validate<Formula> for Expr {
                 let left = Option::<Expr>::validate(left)?;
                 let right = Option::<Expr>::validate(right)?;
                 match op.0 {
+                    Op::LendShare => {
+                        assert!(left.is_none(), "Structure has no left operand");
+                        Self::op(None, Loc(Op::Lend, op.1), Self::op(None, Loc(Op::Share, op.1), right))
+                    },
+                    Op::ShareLend => {
+                        assert!(left.is_none(), "Structure has no left operand");
+                        Self::op(None, Loc(Op::Share, op.1), Self::op(None, Loc(Op::Lend, op.1), right))
+                    },
                     Op::Structure => {
                         assert!(left.is_none(), "Structure has no left operand");
                         let right = right.expect("Structure has a right operand");

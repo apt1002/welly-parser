@@ -144,6 +144,12 @@ pub enum Op {
     /// `$x` is shared.
     Share,
 
+    /// `&$x` means `& $x`.
+    LendShare,
+
+    /// `$&x` means `$ &x`.
+    ShareLend,
+
     /// `*x` is a fresh copy of `x`.
     Clone,
 
@@ -240,7 +246,7 @@ impl PartialEq for OpWord {
 }
 
 /// All [`OpWord`]s that exist in Welly.
-pub const ALL_OP_WORDS: [(&'static str, OpWord); 37] = [
+pub const ALL_OP_WORDS: [(&'static str, OpWord); 39] = [
     ("true", OpWord::new(OpInfo::nonfix(Op::True))),
     ("false", OpWord::new(OpInfo::nonfix(Op::False))),
     ("Self", OpWord::new(OpInfo::nonfix(Op::SelfType))),
@@ -275,6 +281,8 @@ pub const ALL_OP_WORDS: [(&'static str, OpWord); 37] = [
     ("|", OpWord::new(OpInfo::infix(Op::Union, Precedence::Union))),
     ("&", OpWord::new(OpInfo::prefix(Op::Lend))),
     ("$", OpWord::new(OpInfo::prefix(Op::Share))),
+    ("&$", OpWord::new(OpInfo::prefix(Op::LendShare))),
+    ("$&", OpWord::new(OpInfo::prefix(Op::ShareLend))),
     ("struct", OpWord::new(OpInfo::prefix(Op::Structure))),
     ("^", OpWord::new(OpInfo::infix(Op::Power, Precedence::Power))),
     (".", OpWord::new(OpInfo::infix(Op::Dot, Precedence::Dot))),
