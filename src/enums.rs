@@ -129,6 +129,9 @@ pub enum Op {
     /// `-7 %+ 3` is `0`.
     URem,
 
+    /// `OK[Int] | Err[String]` is a tagged union type.
+    Union,
+
     /// `+3` is `3`.
     Plus,
 
@@ -144,8 +147,8 @@ pub enum Op {
     /// `*x` is a fresh copy of `x`.
     Clone,
 
-    /// `OK[Int] | Err[String]` is a tagged union type.
-    Union,
+    /// `struct Point(x: Int, y: Int)` defines a tuple type.
+    Structure,
 
     /// `(-7) ^ 2` is `49`.
     Power,
@@ -237,7 +240,7 @@ impl PartialEq for OpWord {
 }
 
 /// All [`OpWord`]s that exist in Welly.
-pub const ALL_OP_WORDS: [(&'static str, OpWord); 36] = [
+pub const ALL_OP_WORDS: [(&'static str, OpWord); 37] = [
     ("true", OpWord::new(OpInfo::nonfix(Op::True))),
     ("false", OpWord::new(OpInfo::nonfix(Op::False))),
     ("Self", OpWord::new(OpInfo::nonfix(Op::SelfType))),
@@ -269,9 +272,10 @@ pub const ALL_OP_WORDS: [(&'static str, OpWord); 36] = [
     ("/+", OpWord::new(OpInfo::infix(Op::UDiv, Precedence::Product))),
     ("%", OpWord::new(OpInfo::infix(Op::SRem, Precedence::Product))),
     ("%+", OpWord::new(OpInfo::infix(Op::URem, Precedence::Product))),
+    ("|", OpWord::new(OpInfo::infix(Op::Union, Precedence::Union))),
     ("&", OpWord::new(OpInfo::prefix(Op::Lend))),
     ("$", OpWord::new(OpInfo::prefix(Op::Share))),
-    ("|", OpWord::new(OpInfo::infix(Op::Union, Precedence::Union))),
+    ("struct", OpWord::new(OpInfo::prefix(Op::Structure))),
     ("^", OpWord::new(OpInfo::infix(Op::Power, Precedence::Power))),
     (".", OpWord::new(OpInfo::infix(Op::Dot, Precedence::Dot))),
 ];

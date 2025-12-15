@@ -1,7 +1,7 @@
 use std::{fmt};
 use std::rc::{Rc};
 
-use super::{enums, loc, parser, lexer, Validate, Name, Tag, Pattern, Stmt, Block};
+use super::{enums, loc, parser, lexer, Validate, Name, Tag, Pattern, stmt, Stmt, Block};
 use enums::{Separator, Op, ItemWord};
 use loc::{Location, Loc, Locate};
 use parser::{Doc, Formula, Item};
@@ -113,6 +113,9 @@ pub enum Expr {
     /// `[ ... ]` constructs a tuple type.
     TupleType(Loc<Box<[Expr]>>),
 
+    /// `struct name( ... )` constructs a tuple type with names.
+    Structure(Location, Box<Pattern>),
+
     /// `expr.TAG` removes `TAG` from `expr` otherwise does `match expr`.
     When(Box<Expr>, Loc<Tag>),
 
@@ -155,6 +158,9 @@ impl Expr {
 
     /// Construct a `Self::TupleType`.
     pub fn tuple_type(args: Loc<impl Into<Box<[Expr]>>>) -> Self { Self::TupleType(Loc(args.0.into(), args.1)) }
+
+    /// Construct a `Self::Structure`.
+    pub fn structure(word: Location, pattern: Pattern) -> Self { Self::Structure(word, Box::new(pattern)) }
 
     /// Construct a `Self::When`.
     pub fn when(self, tag: Loc<Tag>) -> Self { Self::When(Box::new(self), tag) }
@@ -205,6 +211,7 @@ impl std::fmt::Debug for Expr {
                 for type_ in &types.0 { t.field(type_); }
                 t.finish()
             },
+            Self::Structure(word, pattern) => f.debug_tuple("Structure").field(word).field(pattern).finish(),
             Self::When(expr, tag) => f.debug_tuple("When").field(expr).field(tag).finish(),
             Self::Dot(expr, selector) => f.debug_tuple("Dot").field(expr).field(selector).finish(),
             Self::Op(left, op, right) => {
@@ -235,6 +242,7 @@ impl Locate for Expr {
             Self::Group(expr) => expr.loc_start(),
             Self::Tuple(exprs) => exprs.loc_start(),
             Self::TupleType(types) => types.loc_start(),
+            Self::Structure(word, _) => word.loc_start(),
             Self::When(expr, _) => expr.loc_start(),
             Self::Dot(expr, _) => expr.loc_start(),
             Self::Op(Some(expr), _, _) => expr.loc_start(),
@@ -264,6 +272,7 @@ impl Locate for Expr {
             Self::Group(expr) => expr.loc_end(),
             Self::Tuple(exprs) => exprs.loc_end(),
             Self::TupleType(types) => types.loc_end(),
+            Self::Structure(_, pattern) => pattern.loc_end(),
             Self::When(_, tag) => tag.loc_end(),
             Self::Dot(_, selector) => selector.loc_end(),
             Self::Op(_, _, Some(expr)) => expr.loc_end(),
@@ -310,6 +319,14 @@ impl Validate<Formula> for Expr {
                 let left = Option::<Expr>::validate(left)?;
                 let right = Option::<Expr>::validate(right)?;
                 match op.0 {
+                    Op::Structure => {
+                        assert!(left.is_none(), "Structure has no left operand");
+                        let right = right.expect("Structure has a right operand");
+                        let (name, right) = stmt::remove_call(right)?;
+                        let name = if let Some(name) = name { Some(stmt::to_name(name)?) } else { None };
+                        let pattern = Pattern::from_expr(right)?;
+                        Self::structure(op.1, pattern).named(name)
+                    },
                     Op::Dot => {
                         let left = left.expect("Dot has a left operand");
                         let right = right.expect("Dot has a right operand");

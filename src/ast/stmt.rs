@@ -23,8 +23,10 @@ pub const MISSING_SEMICOLON: &'static str = "This statement must be followed by 
 
 // ----------------------------------------------------------------------------
 
+// TODO: Make these into methods of `Expr`.
+
 /// Checks that `expr` is a `Name`.
-fn to_name(expr: Expr) -> loc::Result<Loc<Name>> {
+pub fn to_name(expr: Expr) -> loc::Result<Loc<Name>> {
     let ret = match expr {
         Expr::Name(name) => name,
         expr => Err(Loc(BAD_NAME, expr.loc()))?,
@@ -62,7 +64,7 @@ fn remove_cast(expr: Expr) -> (Expr, Option<Expr>) {
 /// Checks whether `expr` is of the form `function(expr)` or just `expr`.
 /// `function`is optional.
 /// `expr` can be an [`Expr::Group`] or an [`Expr::Tuple`].
-fn remove_call(expr: Expr) -> loc::Result<(Option<Expr>, Expr)> {
+pub fn remove_call(expr: Expr) -> loc::Result<(Option<Expr>, Expr)> {
     let (function, expr) = match expr {
         Expr::Call(function, expr) => (Some(*function), *expr),
         expr => (None, expr),
