@@ -1,0 +1,10 @@
+obj Eq[Rhs] {
+    fn eq(&self, &other: Rhs): Bool;
+
+    fn ne(&self, &other: Rhs): Bool {
+        // FIXME are we inheriting source code or compiled code?
+        not self.eq(other);
+    }
+}
+
+Shared[T] = tuple($T);

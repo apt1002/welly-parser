@@ -1,0 +1,72 @@
+use std.iter.Iterator;
+use std.iter.Iterable;
+
+obj Sequence[T] {
+    fn len(self): Int;
+    fn get(& $self, i: Int): $T;
+    fn borrow[U](&self, i: Int, borrower: (fn(&T): U)): U;
+}
+
+obj Single[T]($item: T) {
+    fn new(T): Self {
+        Self(T);
+    }
+
+    impl Sequence {
+        fn len(&self) { 1; }
+
+        fn get(& $self, i) {
+            if i!=0 { panic(); }
+            $self.item
+        }
+
+        fn borrow[U](&self, i, borrower) {
+            if i!=0 { panic(); }
+            borrower(&self.item);
+        }
+    }
+}
+
+obj Vec[T] {
+    fn new(): Self { ... }
+    fn push(&self, item: T) { ... }
+
+    impl Sequence {
+        fn len(&self) { ... }
+        fn get(& $self, i) { ... }
+        fn borrow[U](&self, i: Int, borrower: (fn(&T): U)): U { ... }
+    }
+}
+
+Link[T] = Option[(T, Link[T])];
+
+obj LinkedList[T](items: Link[T]) {
+    fn new(): Self { return Self(NONE); }
+    fn push(&self, item: T) {
+        self.items = SOME((item, self.items));
+    }
+
+    fn into_reverse(self): Self {
+        ret = Self.new();
+        items = self.items;
+        while true {
+            (head, items) = items.SOME;
+            (&ret).push(head);
+        }
+        case NONE() { return ret; }
+    }
+
+    impl Iterator {
+        fn next(self) {
+            (head, self.items) = self.items.SOME;
+            return SOME(head);
+        }
+    }
+
+    impl Iterable {
+        fn into_iter(self) {
+            return self.into_reverse();
+        }
+    }
+}
+

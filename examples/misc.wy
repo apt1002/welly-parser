@@ -1,0 +1,104 @@
+///////
+mod std.core;
+
+Option[T] = SOME[T] | NONE[];
+Result[T, E] = OK[T] | E;
+Might[E] = Result[struct (), E];
+
+//////
+
+Address = String;
+struct Xy(Int, Int);
+ErrorLocating = ERROR[String];
+
+WarpTarget = STRUCTURE[Xy, Address]
+    | POSITION[Xy]
+    | NO_RECEIVER[Address]
+    | NO_PATH[Address]
+    | NONE[];
+
+fn get_warp_target(warp: String): WarpTarget {
+    ...
+}
+
+fn main(): OK[] | ErrorLocating {
+    cli_warp = "my address";
+
+    match get_warp_target(cli_warp, ...);
+    case STRUCTURE(start_at, address) { position = start_at; }
+    case POSITION(start_at) { position = start_at; }
+    case NO_RECEIVER(address) { return ERROR("no receiver"); }
+    case NO_PATH(address) { return ERROR("no path"); }
+    case NONE() { return ERROR("nothing supplied"); } // NONE()?
+
+    _ = debug(position);
+    start_game(position);
+}
+
+
+
+fn fib(n: Int): Int {
+    match n;
+    case 0 | 1 { return 1; }
+    case n { return fib(n-1) + fib(n-2); }
+}
+
+fn greet(s: Status) {
+    name = s.FRIENDLY;
+    print("hello {name}");
+    case _ { return; }
+}
+
+mac truthy(input) {
+    match Dyn(input);
+    case 0: Int { false }
+    case x: String { x.len() == 0 }
+    case false: Bool { false }
+    case OK(_): OK[Dyn] { true }
+    case x: (obj { fn truthy(self): Bool }) { x.truthy() }
+    case x: Array[Dyn] { x.len() == 0 }
+    case _: FalseThing { false }
+    case _ { true }
+}
+
+fn test_truth() {
+    b1 = truthy(0);
+    b2 = truthy("hello");
+    b3 = truthy(true);
+    b4 = truthy(OK(3));
+    b5 = truthy(FilePath.new(filename));
+
+    a = Array[Int].new();
+    a.push(45);
+    a.push(26);
+    b6 = truthy(a);
+}
+
+
+// fn read_file(filename: String) -> Result<String, io::Error> {
+//    return FilePath(filename)?.open()?.read()?
+// }
+
+obj FilePath {
+    fn new(s: String): OK[FilePath] | io.Error {
+        .....
+    }
+
+    fn open(self): OK[Reader] | io.Error {
+        ....
+    }
+
+}
+
+
+fn read_file(filename: String): OK[String] | io.Error {
+    ((FilePath.new(filename).OK).open().OK).read();
+}
+
+
+fn equal_contents(filename1: String, filename2: String): OK[bool] | io.Error {
+    reader1 = (FilePath.new(filename1).OK).open().OK;
+    reader2 = (FilePath.new(filename2).OK).open().OK;
+
+    OK( reader1.read().OK == reader2.read().OK );
+}

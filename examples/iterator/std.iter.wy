@@ -1,0 +1,40 @@
+use std.lists.{Sequence, Iterable};
+use std.ops.Shared;
+
+obj Iterator[T] {
+    macro next(self): Option[T];
+}
+
+obj Iterable[T] {
+    macro into_iter(self): Iterator[T];
+
+    macro iter(& $self): Iterator[Shared[T]] {
+        sequence = self;
+        obj(i: Int) {
+            fn next(self): Option[Shared[T]] {
+                if i == Sequence.len(sequence) { NONE }
+                ret = Sequence.get(sequence, i);
+                self.i += 1;
+                SOME($ret);
+            }
+        }(0)
+    }
+}
+
+trait Run {
+    fn run(self, item: T): BREAK[] | CONTINUE[];
+}
+
+obj ForEach[T] {
+    // body implements `Run`.
+    macro for_each(self, body) {
+        iter = Iterable.into_iter(self);
+        while true {
+            match iter.next();
+            case SOME(item) { match Run.run(body, item) }
+            case CONTINUE() {}
+        }
+        case NONE() {}
+        case BREAK() {}
+    }
+}

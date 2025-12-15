@@ -1,0 +1,22 @@
+use std.lists.{Vec, Single};
+
+fn main() {
+    a = Vec.new();
+    _ = (&a).push(4);
+
+    std.iter.ForEach.for_each(a, obj{
+        fn run(self, item: Int): BREAK[] | CONTINUE[] {
+            _ = print(item);
+            CONTINUE();
+        }
+    });
+
+
+    s = Single.new(4);
+    assert(std.lists.Sequence.borrow[Bool](s, 0, fn(&item: Int): Bool {
+        item == 4;
+    }));
+}
+
+
+
