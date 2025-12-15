@@ -163,7 +163,11 @@ pub enum Op {
 pub struct Precedence(NonZeroU8);
 
 impl Precedence {
+    /// Smaller than the `Precedence` of any operator.
     pub const MIN: Self = Precedence(NonZeroU8::new(1).unwrap());
+
+    /// The precedence of function calls.
+    pub const CALL: Self = Precedence(NonZeroU8::new(30).unwrap());
 }
 
 const fn p(n: u8) -> Option<Precedence> { Some(Precedence(NonZeroU8::new(n).unwrap())) }

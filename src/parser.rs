@@ -147,8 +147,20 @@ impl Formula {
                         Err(Loc(MISSING_OP, l.1))?
                     }
                 },
-                Lexeme::Open(BK::Round) => Self::RoundCall(Box::new(ret), parse_bracket(Loc(BK::Round, l.1), input)?),
-                Lexeme::Open(BK::Square) => Self::SquareCall(Box::new(ret), parse_bracket(Loc(BK::Square, l.1), input)?),
+                Lexeme::Open(BK::Round) => {
+                    if limit >= Precedence::CALL {
+                        input.unread(l);
+                        return Ok(Some(ret));
+                    }
+                    Self::RoundCall(Box::new(ret), parse_bracket(Loc(BK::Round, l.1), input)?)
+                },
+                Lexeme::Open(BK::Square) => {
+                    if limit >= Precedence::CALL {
+                        input.unread(l);
+                        return Ok(Some(ret));
+                    }
+                    Self::SquareCall(Box::new(ret), parse_bracket(Loc(BK::Square, l.1), input)?)
+                },
                 _ => {
                     input.unread(l);
                     return Ok(Some(ret));
