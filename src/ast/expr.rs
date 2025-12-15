@@ -1,3 +1,4 @@
+use std::{fmt};
 use std::rc::{Rc};
 
 use super::{enums, loc, parser, lexer, Validate, Name, Tag, Pattern, Stmt, Block};
@@ -14,7 +15,7 @@ pub const MISSING_COMMA: &'static str = "Expected a comma after this expression"
 // ----------------------------------------------------------------------------
 
 /// Identifies a field or a tuple of fields, or removes a [`Tag`].
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Selector {
     /// By name.
     Name(Name),
@@ -32,6 +33,15 @@ impl Selector {
             e => { Err(Loc(BAD_SELECTOR, e.loc()))? },
         };
         Ok(ret)
+    }
+}
+
+impl fmt::Debug for Selector {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Name(name) => name.fmt(f),
+            Self::Index(index) => index.fmt(f),
+        }
     }
 }
 
@@ -53,7 +63,7 @@ impl From<ItemWord> for IsMacro {
 
 // ----------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Expr {
     /// An `Expr` that binds a `Name`.
     Named(Loc<Name>, Box<Expr>),
@@ -159,6 +169,54 @@ impl Expr {
 
     /// Construct a `Self::Call`.
     pub fn call(self, arg: Self) -> Self { Self::Call(Box::new(self), Box::new(arg)) }
+}
+
+impl std::fmt::Debug for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Named(name, expr) => f.debug_tuple("Named").field(name).field(expr).finish(),
+            Self::Module(word, block) => {
+                let mut t = f.debug_tuple("Module");
+                t.field(word);
+                if let Some(block) = block { t.field(block); }
+                t.finish()
+            },
+            Self::Object(word, pattern, block) => {
+                f.debug_tuple("Object").field(word).field(pattern).field(block).finish()
+            },
+            Self::Function(is_macro, pattern, return_type, block) => {
+                let mut t = f.debug_tuple(if is_macro.0.0 { "Macro" } else { "Function" });
+                t.field(pattern).field(return_type).field(block).finish()
+            },
+            Self::Trait(word, block) => f.debug_tuple("Trait").field(word).field(block).finish(),
+            Self::Char(c) => c.fmt(f),
+            Self::Str(s) => s.fmt(f),
+            Self::Int(i) => i.fmt(f),
+            Self::Tag(tag) => tag.fmt(f),
+            Self::Name(name) => name.fmt(f),
+            Self::Group(expr) => f.debug_tuple("Group").field(&expr.0).finish(),
+            Self::Tuple(exprs) => {
+                let mut t = f.debug_tuple("Tuple");
+                for expr in &exprs.0 { t.field(expr); }
+                t.finish()
+            },
+            Self::TupleType(types) => {
+                let mut t = f.debug_tuple("TupleType");
+                for type_ in &types.0 { t.field(type_); }
+                t.finish()
+            },
+            Self::When(expr, tag) => f.debug_tuple("When").field(expr).field(tag).finish(),
+            Self::Dot(expr, selector) => f.debug_tuple("Dot").field(expr).field(selector).finish(),
+            Self::Op(left, op, right) => {
+                let mut t = f.debug_tuple("Op");
+                if let Some(left) = left { t.field(left); }
+                t.field(op);
+                if let Some(right) = right { t.field(right); }
+                t.finish()
+            },
+            Self::Call(function, argument) => f.debug_tuple("Call").field(function).field(argument).finish(),
+        }
+    }
 }
 
 impl Locate for Expr {
@@ -333,13 +391,15 @@ impl Validate<[Doc<Item>]> for CommaSeparated {
         let mut has_comma = true;
         let mut iter = tree.iter();
         while let Some(item) = iter.next() {
-            let value = Expr::validate(item)?;
+            contents.push(Expr::validate(item)?);
             match iter.next() {
                 None => { has_comma = false; break; },
                 Some(Doc(Item::Separator(Loc(Separator::Comma, _)), _)) => {},
-                _ => { Err(Loc(MISSING_COMMA, value.loc()))? },
+                _ => {
+                    let loc = contents.last().expect("Just pushed").loc();
+                    Err(Loc(MISSING_COMMA, loc))?
+                },
             }
-            contents.push(value);
         }
         Ok(Self(contents.into(), has_comma))
     }

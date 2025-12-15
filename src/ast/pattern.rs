@@ -1,3 +1,5 @@
+use std::{fmt};
+
 use super::{enums, loc, Validate, Name, Selector, Expr};
 use enums::{Op};
 use loc::{Loc, Locate};
@@ -51,7 +53,7 @@ impl Mode {
 ///
 /// It is a compile-time error if the structure of the value does not match the
 /// structure of the pattern.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Pattern {
     /// Bind the value to a `Name`.
     Name(Mode, Loc<Name>),
@@ -79,12 +81,12 @@ impl Pattern {
     fn from_expr_mode(expr: Expr, mode: Mode) -> loc::Result<Self> {
         let ret = match expr {
             Expr::Name(name) => Self::Name(mode, name),
+            Expr::Group(expr) => Self::Group(Loc(Box::new(Self::from_expr_mode(*expr.0, mode)?), expr.1)),
             Expr::Tuple(exprs) => {
                 let mut patterns = Vec::new();
                 for expr in exprs.0 { patterns.push(Self::from_expr_mode(expr, mode)?); }
                 Self::Tuple(Loc(patterns.into(), exprs.1))
             },
-            Expr::Group(expr) => Self::Group(Loc(Box::new(Self::from_expr_mode(*expr.0, mode)?), expr.1)),
             Expr::Op(None, Loc(Op::Share, _), Some(expr)) => Self::from_expr_mode(*expr, mode.share())?,
             Expr::Op(None, Loc(Op::Lend, _), Some(expr)) => Self::from_expr_mode(*expr, mode.lend())?,
             Expr::Op(Some(expr), Loc(Op::Cast, _), Some(type_)) => {
@@ -105,11 +107,27 @@ impl Pattern {
     }
 }
 
+impl fmt::Debug for Pattern {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Name(mode, name) => write!(f, "{:?} {:?}", mode, name),
+            Self::Group(pattern) => f.debug_tuple("Group").field(&pattern.0).finish(),
+            Self::Tuple(patterns) => {
+                let mut t = f.debug_tuple("Tuple");
+                for pattern in &patterns.0 { t.field(pattern); }
+                t.finish()
+            },
+            Self::Cast(pattern, expr) => f.debug_tuple("Cast").field(pattern).field(expr).finish(),
+            Self::Dot(expr, selector) => f.debug_tuple("Dot").field(expr).field(selector).finish(),
+        }
+    }
+}
+
 impl Locate for Pattern {
     fn loc_start(&self) -> usize {
         match self {
             Self::Name(_, name) => name.loc_start(),
-            Self::Group(expr) => expr.loc_start(),
+            Self::Group(pattern) => pattern.loc_start(),
             Self::Tuple(tuple) => tuple.loc_start(),
             Self::Cast(pattern, _) => pattern.loc_start(),
             Self::Dot(expr, _) => expr.loc_start(),
@@ -119,7 +137,7 @@ impl Locate for Pattern {
     fn loc_end(&self) -> usize {
         match self {
             Self::Name(_, name) => name.loc_end(),
-            Self::Group(expr) => expr.loc_end(),
+            Self::Group(pattern) => pattern.loc_end(),
             Self::Tuple(tuple) => tuple.loc_end(),
             Self::Cast(_, type_) => type_.loc_end(),
             Self::Dot(_, selector) => selector.loc_end(),
