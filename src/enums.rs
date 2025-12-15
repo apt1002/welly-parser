@@ -35,8 +35,6 @@ pub enum Separator {Comma, Semicolon}
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u8)]
 pub enum Op {
-    // TODO: `when`.
-
     /// `structure.field` extracts the `field` component of `structure`.
     Dot,
 
