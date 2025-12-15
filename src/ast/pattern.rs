@@ -66,7 +66,7 @@ pub enum Pattern {
     Cast(Box<Pattern>, Box<Expr>),
 
     /// `expr.name` sets field `name` of `expr` to the value.
-    Dot(Box<Expr>, Selector),
+    Dot(Box<Expr>, Loc<Selector>),
 }
 
 impl Pattern {

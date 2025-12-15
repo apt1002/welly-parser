@@ -17,52 +17,22 @@ pub const MISSING_COMMA: &'static str = "Expected a comma after this expression"
 #[derive(Debug, Clone)]
 pub enum Selector {
     /// By name.
-    Name(Loc<Name>),
+    Name(Name),
 
     /// By position.
-    Index(Loc<i64>),
-
-    /// A tuple of fields.
-    Tuple(Loc<Box<[Selector]>>)
+    Index(i64),
 }
 
 impl Selector {
     /// Checks that `expr` is a valid [`Selector`].
-    fn from_expr(expr: Expr) -> loc::Result<Self> {
+    fn from_expr(expr: Expr) -> loc::Result<Loc<Self>> {
         let ret = match expr {
-            Expr::Name(name) => Self::Name(name),
-            Expr::Int(index) => Self::Index(index),
-            Expr::Tuple(contents) => {
-                let mut selectors = Vec::new();
-                for expr in contents.0 { selectors.push(Self::from_expr(expr)?); }
-                Self::Tuple(Loc(selectors.into(), contents.1))
-            },
+            Expr::Name(name) => name.map(Self::Name),
+            Expr::Int(index) => index.map(Self::Index),
             e => { Err(Loc(BAD_SELECTOR, e.loc()))? },
         };
         Ok(ret)
     }
-}
-
-impl Locate for Selector {
-    fn loc_start(&self) -> usize {
-        match self {
-            Self::Name(name) => name.loc_start(),
-            Self::Index(index) => index.loc_start(),
-            Self::Tuple(tuple) => tuple.loc_start(),
-        }
-    }
-
-    fn loc_end(&self) -> usize {
-        match self {
-            Self::Name(name) => name.loc_end(),
-            Self::Index(index) => index.loc_end(),
-            Self::Tuple(tuple) => tuple.loc_end(),
-        }
-    }
-}
-
-impl<T> Validate<T> for Selector where Expr: Validate<T> {
-    fn validate(tree: &T) -> loc::Result<Self> { Ok(Self::from_expr(Expr::validate(tree)?)?) }
 }
 
 // ----------------------------------------------------------------------------
@@ -137,7 +107,7 @@ pub enum Expr {
     When(Box<Expr>, Loc<Tag>),
 
     /// `expr.name` reads field `name` of `expr`.
-    Dot(Box<Expr>, Selector),
+    Dot(Box<Expr>, Loc<Selector>),
 
     /// `expr op expr` applies `op` to up to two operands.
     Op(Option<Box<Expr>>, Loc<Op>, Option<Box<Expr>>),
@@ -180,7 +150,7 @@ impl Expr {
     pub fn when(self, tag: Loc<Tag>) -> Self { Self::When(Box::new(self), tag) }
 
     /// Construct a `Self::Dot`.
-    pub fn dot(self, selector: Selector) -> Self { Self::Dot(Box::new(self), selector) }
+    pub fn dot(self, selector: Loc<Selector>) -> Self { Self::Dot(Box::new(self), selector) }
 
     /// Construct a `Self::Op`.
     pub fn op(left: impl Into<Option<Self>>, op: Loc<Op>, right: impl Into<Option<Self>>) -> Self {
