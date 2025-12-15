@@ -151,9 +151,6 @@ pub enum Op {
     /// The value `false`.
     False,
 
-    /// The value `self`.
-    SelfValue,
-
     /// The type `Self`.
     SelfType,
 }
@@ -232,7 +229,7 @@ impl PartialEq for OpWord {
 }
 
 /// All [`OpWord`]s that exist in Welly.
-pub const ALL_OP_WORDS: [(&'static str, OpWord); 37] = [
+pub const ALL_OP_WORDS: [(&'static str, OpWord); 36] = [
     (".", OpWord::new(OpInfo::infix_left(Op::Dot, 30))),
     ("^", OpWord::new(OpInfo::infix_right(Op::Pow, 28))),
     ("|", OpWord::new(OpInfo::infix_left(Op::Union, 26))),
@@ -268,7 +265,6 @@ pub const ALL_OP_WORDS: [(&'static str, OpWord); 37] = [
     ("or", OpWord::new(OpInfo::infix_left(Op::Or, 2))),
     ("true", OpWord::new(OpInfo::nonfix(Op::True))),
     ("false", OpWord::new(OpInfo::nonfix(Op::False))),
-    ("self", OpWord::new(OpInfo::nonfix(Op::SelfValue))),
     ("Self", OpWord::new(OpInfo::nonfix(Op::SelfType))),
 ];
 
