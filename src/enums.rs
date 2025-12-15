@@ -1,5 +1,4 @@
 use std::{fmt};
-use std::num::{NonZeroU8};
 
 /// Distinguishes the kinds of bracket.
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -35,68 +34,34 @@ pub enum Separator {Comma, Semicolon}
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u8)]
 pub enum Op {
-    /// `structure.field` extracts the `field` component of `structure`.
-    Dot,
+    /// The value `true`.
+    True,
 
-    /// `(-7) ^ 2` is `49`.
-    Pow,
+    /// The value `false`.
+    False,
 
-    /// `OK[Int] | Err[String]` is a tagged union type.
-    Union,
+    /// The type `Self`.
+    SelfType,
 
-    /// `+3` is `3`.
-    Plus,
+    /// `false or true` is `true`.
+    Or,
 
-    /// `-3` is `-3`.
-    Minus,
+    /// `false and true` is `false`.
+    And,
 
-    /// `&x` is loaned.
-    Lend,
+    /// `not false` is `true`.
+    Not,
 
-    /// `$x` is shared.
-    Share,
+    /// `item in collection` - Membership test.
+    ///
+    /// Also abused as part of `for item in collection { ... }`.
+    In,
 
-    /// `*x` is a fresh copy of `x`.
-    Clone,
+    /// `-3 == 5` is `false`.
+    EQ,
 
-    /// `-7 * 3` is `-21`.
-    Mul,
-
-    /// `-7 / 3` is `-3`.
-    SDiv,
-
-    /// `-7 /+ 3` is `0x555555555555553`.
-    UDiv,
-
-    /// `-7 % 3` is `2`.
-    SRem,
-
-    /// `-7 %+ 3` is `0`.
-    URem,
-
-    /// `3 + 5` is `8`.
-    Add,
-
-    /// `3 - 5` is `-2`.
-    Sub,
-
-    /// `-7 << 3` is `-28`.
-    SL,
-
-    /// `-7 >> 2` is `-2`.
-    SSR,
-
-    /// `-7 >>+ 2` is `0xFFFFFFFFFFFFFFFE`.
-    USR,
-
-    /// `x: t` - A value `x` cast to a type `t`.
-    Cast,
-
-    /// `0..3` means `0, 1, 2`.
-    Exclusive,
-
-    /// `0...3` means `0, 1, 2, 3`.
-    Inclusive,
+    /// `-3 != 5` is `true`.
+    NE,
 
     /// `-3 < 5` is true.
     SLT,
@@ -125,52 +90,95 @@ pub enum Op {
     /// `-3 <> 5` is `true`.
     LG,
 
-    /// `-3 == 5` is `false`.
-    EQ,
+    /// `0..3` means `0, 1, 2`.
+    Exclusive,
 
-    /// `-3 != 5` is `true`.
-    NE,
+    /// `0...3` means `0, 1, 2, 3`.
+    Inclusive,
 
-    /// `item in collection` - Membership test.
-    ///
-    /// Also abused as part of `for item in collection { ... }`.
-    In,
+    /// `x: t` - A value `x` cast to a type `t`.
+    Cast,
 
-    /// `not false` is `true`.
-    Not,
+    /// `-7 << 3` is `-28`.
+    SL,
 
-    /// `false and true` is `false`.
-    And,
+    /// `-7 >> 2` is `-2`.
+    SSR,
 
-    /// `false or true` is `true`.
-    Or,
+    /// `-7 >>+ 2` is `0xFFFFFFFFFFFFFFFE`.
+    USR,
 
-    /// The value `true`.
-    True,
+    /// `3 + 5` is `8`.
+    Add,
 
-    /// The value `false`.
-    False,
+    /// `3 - 5` is `-2`.
+    Sub,
 
-    /// The type `Self`.
-    SelfType,
+    /// `-7 * 3` is `-21`.
+    Mul,
+
+    /// `-7 / 3` is `-3`.
+    SDiv,
+
+    /// `-7 /+ 3` is `0x555555555555553`.
+    UDiv,
+
+    /// `-7 % 3` is `2`.
+    SRem,
+
+    /// `-7 %+ 3` is `0`.
+    URem,
+
+    /// `+3` is `3`.
+    Plus,
+
+    /// `-3` is `-3`.
+    Minus,
+
+    /// `&x` is loaned.
+    Lend,
+
+    /// `$x` is shared.
+    Share,
+
+    /// `*x` is a fresh copy of `x`.
+    Clone,
+
+    /// `OK[Int] | Err[String]` is a tagged union type.
+    Union,
+
+    /// `(-7) ^ 2` is `49`.
+    Power,
+
+    /// `structure.field` extracts the `field` component of `structure`.
+    Dot,
 }
 
 // ----------------------------------------------------------------------------
 
+/// The return type of [`Precedence::compare()`].
+pub enum Associativity {Left, Right, Ambiguous}
+
 /// Represents the binding precedence of an operator.
 /// No left-`Precedence` is ever equal to a right-`Precedence`.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Precedence(NonZeroU8);
+#[repr(u8)]
+pub enum Precedence {None, Or, And, Not, In, Eq, Cmp, Range, Cast, Shift, Sum, Product, Union, Prefix, Postfix, Dot, Power}
 
 impl Precedence {
-    /// Smaller than the `Precedence` of any operator.
-    pub const MIN: Self = Precedence(NonZeroU8::new(1).unwrap());
-
-    /// The precedence of function calls.
-    pub const CALL: Self = Precedence(NonZeroU8::new(30).unwrap());
+    /// Distinguishes `(_ self _) other _` from `_ self (_ other _)`.
+    pub fn compare(self, other: Precedence) -> Associativity {
+        use {Precedence::*, Associativity::*};
+        if self < other { return Right }
+        if self > other { return Left }
+        match self {
+            Or | And | Not | In | Sum | Product | Union | Dot => Left,
+            Cast | Shift | Power => Right,
+            Eq | Cmp | Range => Ambiguous,
+            None | Prefix | Postfix => { panic!("Associativity only makes sense for infix operators"); },
+        }
+    }
 }
-
-const fn p(n: u8) -> Option<Precedence> { Some(Precedence(NonZeroU8::new(n).unwrap())) }
 
 /// An [`Op`] with its binding precedences.
 ///
@@ -180,18 +188,14 @@ pub struct OpInfo {
     /// The `Op`.
     pub op: Op,
 
-    /// How tightly `op` binds to its left operand, if any.
-    pub left: Option<Precedence>,
-
-    /// How tightly `op` binds to its right operand, if any.
-    pub right: Option<Precedence>,
+    /// How tightly `op` binds to its operands.
+    pub precedence: Precedence,
 }
 
 impl OpInfo {
-    const fn nonfix(op: Op) -> Self { Self {op, left: None, right: None} }
-    const fn prefix(op: Op, right: u8) -> Self { Self {op, left: None, right: p(right)} }
-    const fn infix_left(op: Op, left: u8) -> Self { Self {op, left: p(left), right: p(left+1)} }
-    const fn infix_right(op: Op, right: u8) -> Self { Self {op, left: p(right+1), right: p(right)} }
+    const fn nonfix(op: Op) -> Self { Self {op, precedence: Precedence::None} }
+    const fn prefix(op: Op) -> Self { Self {op, precedence: Precedence::Prefix} }
+    const fn infix(op: Op, precedence: Precedence) -> Self { Self {op, precedence} }
 }
 
 impl fmt::Debug for OpInfo {
@@ -216,12 +220,12 @@ pub struct OpWord {
 
 impl OpWord {
     /// Make an `OpWord` describing an operator that has two meanings.
-    pub const fn new_ambiguous(with_left: OpInfo, without_left: OpInfo) -> Self {
+    pub const fn new_pun(with_left: OpInfo, without_left: OpInfo) -> Self {
         Self {with_left, without_left }
     }
 
     /// Make an `OpWord` describing an operator that has one meaning.
-    pub const fn new(op: OpInfo) -> Self { Self::new_ambiguous(op, op) }
+    pub const fn new(op: OpInfo) -> Self { Self::new_pun(op, op) }
 }
 
 impl fmt::Debug for OpWord {
@@ -234,42 +238,42 @@ impl PartialEq for OpWord {
 
 /// All [`OpWord`]s that exist in Welly.
 pub const ALL_OP_WORDS: [(&'static str, OpWord); 36] = [
-    (".", OpWord::new(OpInfo::infix_left(Op::Dot, 30))),
-    ("^", OpWord::new(OpInfo::infix_right(Op::Pow, 28))),
-    ("|", OpWord::new(OpInfo::infix_left(Op::Union, 26))),
-    ("&", OpWord::new(OpInfo::prefix(Op::Lend, 24))),
-    ("$", OpWord::new(OpInfo::prefix(Op::Share, 24))),
-    ("*", OpWord::new_ambiguous(OpInfo::infix_left(Op::Mul, 22), OpInfo::prefix(Op::Clone, 24))),
-    ("/", OpWord::new(OpInfo::infix_left(Op::SDiv, 22))),
-    ("/+", OpWord::new(OpInfo::infix_left(Op::UDiv, 22))),
-    ("%", OpWord::new(OpInfo::infix_left(Op::SRem, 22))),
-    ("%+", OpWord::new(OpInfo::infix_left(Op::URem, 22))),
-    ("+", OpWord::new_ambiguous(OpInfo::infix_left(Op::Add, 20), OpInfo::prefix(Op::Plus, 24))),
-    ("-", OpWord::new_ambiguous(OpInfo::infix_left(Op::Sub, 20), OpInfo::prefix(Op::Minus, 24))),
-    ("<<", OpWord::new(OpInfo::infix_right(Op::SL, 18))),
-    (">>", OpWord::new(OpInfo::infix_right(Op::SSR, 18))),
-    (">>+", OpWord::new(OpInfo::infix_right(Op::USR, 18))),
-    (":", OpWord::new(OpInfo::infix_right(Op::Cast, 16))),
-    ("..", OpWord::new(OpInfo::infix_left(Op::Exclusive, 14))),
-    ("...", OpWord::new(OpInfo::infix_left(Op::Inclusive, 14))),
-    ("<", OpWord::new(OpInfo::infix_left(Op::SLT, 12))),
-    ("<+", OpWord::new(OpInfo::infix_left(Op::ULT, 12))),
-    (">", OpWord::new(OpInfo::infix_left(Op::SGT, 12))),
-    (">+", OpWord::new(OpInfo::infix_left(Op::UGT, 12))),
-    ("<=", OpWord::new(OpInfo::infix_left(Op::SLE, 12))),
-    ("<=+", OpWord::new(OpInfo::infix_left(Op::ULE, 12))),
-    (">=", OpWord::new(OpInfo::infix_left(Op::SGE, 12))),
-    (">=+", OpWord::new(OpInfo::infix_left(Op::UGE, 12))),
-    ("<>", OpWord::new(OpInfo::infix_left(Op::LG, 12))),
-    ("==", OpWord::new(OpInfo::infix_left(Op::EQ, 10))),
-    ("!=", OpWord::new(OpInfo::infix_left(Op::NE, 10))),
-    ("in", OpWord::new(OpInfo::infix_left(Op::In, 8))),
-    ("not", OpWord::new(OpInfo::prefix(Op::Not, 6))),
-    ("and", OpWord::new(OpInfo::infix_left(Op::And, 4))),
-    ("or", OpWord::new(OpInfo::infix_left(Op::Or, 2))),
     ("true", OpWord::new(OpInfo::nonfix(Op::True))),
     ("false", OpWord::new(OpInfo::nonfix(Op::False))),
     ("Self", OpWord::new(OpInfo::nonfix(Op::SelfType))),
+    ("or", OpWord::new(OpInfo::infix(Op::Or, Precedence::Or))),
+    ("and", OpWord::new(OpInfo::infix(Op::And, Precedence::And))),
+    ("not", OpWord::new(OpInfo::prefix(Op::Not))),
+    ("in", OpWord::new(OpInfo::infix(Op::In, Precedence::In))),
+    ("==", OpWord::new(OpInfo::infix(Op::EQ, Precedence::Eq))),
+    ("!=", OpWord::new(OpInfo::infix(Op::NE, Precedence::Eq))),
+    ("<", OpWord::new(OpInfo::infix(Op::SLT, Precedence::Cmp))),
+    ("<+", OpWord::new(OpInfo::infix(Op::ULT, Precedence::Cmp))),
+    (">", OpWord::new(OpInfo::infix(Op::SGT, Precedence::Cmp))),
+    (">+", OpWord::new(OpInfo::infix(Op::UGT, Precedence::Cmp))),
+    ("<=", OpWord::new(OpInfo::infix(Op::SLE, Precedence::Cmp))),
+    ("<=+", OpWord::new(OpInfo::infix(Op::ULE, Precedence::Cmp))),
+    (">=", OpWord::new(OpInfo::infix(Op::SGE, Precedence::Cmp))),
+    (">=+", OpWord::new(OpInfo::infix(Op::UGE, Precedence::Cmp))),
+    ("<>", OpWord::new(OpInfo::infix(Op::LG, Precedence::Cmp))),
+    ("..", OpWord::new(OpInfo::infix(Op::Exclusive, Precedence::Range))),
+    ("...", OpWord::new(OpInfo::infix(Op::Inclusive, Precedence::Range))),
+    (":", OpWord::new(OpInfo::infix(Op::Cast, Precedence::Cast))),
+    ("<<", OpWord::new(OpInfo::infix(Op::SL, Precedence::Shift))),
+    (">>", OpWord::new(OpInfo::infix(Op::SSR, Precedence::Shift))),
+    (">>+", OpWord::new(OpInfo::infix(Op::USR, Precedence::Shift))),
+    ("+", OpWord::new_pun(OpInfo::infix(Op::Add, Precedence::Sum), OpInfo::prefix(Op::Plus))),
+    ("-", OpWord::new_pun(OpInfo::infix(Op::Sub, Precedence::Sum), OpInfo::prefix(Op::Minus))),
+    ("*", OpWord::new_pun(OpInfo::infix(Op::Mul, Precedence::Product), OpInfo::prefix(Op::Clone))),
+    ("/", OpWord::new(OpInfo::infix(Op::SDiv, Precedence::Product))),
+    ("/+", OpWord::new(OpInfo::infix(Op::UDiv, Precedence::Product))),
+    ("%", OpWord::new(OpInfo::infix(Op::SRem, Precedence::Product))),
+    ("%+", OpWord::new(OpInfo::infix(Op::URem, Precedence::Product))),
+    ("&", OpWord::new(OpInfo::prefix(Op::Lend))),
+    ("$", OpWord::new(OpInfo::prefix(Op::Share))),
+    ("|", OpWord::new(OpInfo::infix(Op::Union, Precedence::Union))),
+    ("^", OpWord::new(OpInfo::infix(Op::Power, Precedence::Power))),
+    (".", OpWord::new(OpInfo::infix(Op::Dot, Precedence::Dot))),
 ];
 
 // ----------------------------------------------------------------------------
@@ -277,17 +281,17 @@ pub const ALL_OP_WORDS: [(&'static str, OpWord); 36] = [
 /// All assignment operator keywords that exist in Welly.
 pub const ALL_ASSIGN_WORDS: [(&'static str, Option<Op>); 12] = [
     ("=", None),
-    ("^=", Some(Op::Pow)),
+    ("<<=", Some(Op::SL)),
+    (">>=", Some(Op::SSR)),
+    (">>+=", Some(Op::USR)),
+    ("+=", Some(Op::Add)),
+    ("-=", Some(Op::Sub)),
     ("*=", Some(Op::Mul)),
     ("/=", Some(Op::SDiv)),
     ("/+=", Some(Op::UDiv)),
     ("%=", Some(Op::SRem)),
     ("%+=", Some(Op::URem)),
-    ("+=", Some(Op::Add)),
-    ("-=", Some(Op::Sub)),
-    ("<<=", Some(Op::SL)),
-    (">>=", Some(Op::SSR)),
-    (">>+=", Some(Op::USR)),
+    ("^=", Some(Op::Power)),
 ];
 
 // ----------------------------------------------------------------------------

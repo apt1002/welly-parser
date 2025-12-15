@@ -1,9 +1,9 @@
 use std::{io};
 use io::{BufRead, Write};
-use ansi_term::Colour::{Red};
+use ansi_term::Colour::{Red, Blue};
 
 use welly_parser::{loc, stream, lexer, parser, ast};
-use loc::{Location, Loc, Locate};
+use loc::{Location, Loc};
 use stream::{Stream, IteratorStream, CharIterator};
 use lexer::{Lexer};
 use parser::{Doc, Item};
@@ -62,12 +62,9 @@ pub fn run(output: &mut impl Write, lexer: &Lexer, command: Loc<&str>)
     let stmts = Block::validate(&items)?.0;
     // Show.
     for stmt in stmts {
-        let loc = stmt.loc() - command.1.start;
         // Ignore IO errors.
-        let _ = writeln!(output, "Parsed '{}' into {:#?}",
-            &command.0[loc.start..loc.end],
-            stmt,
-        );
+        let stmt_output = format!("{:#?}", stmt);
+        let _ = writeln!(output, "{}", Blue.paint(stmt_output));
     }
     Ok(())
 }
