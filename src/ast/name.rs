@@ -2,8 +2,8 @@ use std::{fmt};
 use std::rc::{Rc};
 
 fn is_identifier(s: &str) -> bool {
-    if !matches!(s.chars().next(), Some('A' .. 'Z' | 'a' .. 'z' | '_')) { return false; }
-    if !s.chars().all(|c| matches!(c, '0' .. '9' | 'A' .. 'Z' | 'a' .. 'z' | '_')) { return false; }
+    if !matches!(s.chars().next(), Some('A' ..= 'Z' | 'a' ..= 'z' | '_')) { return false; }
+    if !s.chars().all(|c| matches!(c, '0' ..= '9' | 'A' ..= 'Z' | 'a' ..= 'z' | '_')) { return false; }
     return true;
 }
 
@@ -11,7 +11,7 @@ fn is_identifier(s: &str) -> bool {
 /// `Tag`.
 fn is_tag(s: &str) -> bool {
     if s.len() < 2 { return false; }
-    if !s.chars().all(|c| matches!(c, 'A' .. 'Z' | '_')) { return false; }
+    if !s.chars().all(|c| matches!(c, 'A' ..= 'Z' | '_')) { return false; }
     return true;
 }
 
