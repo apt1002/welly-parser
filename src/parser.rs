@@ -1,6 +1,6 @@
 use std::{fmt};
 
-use super::loc::{self, Location, Loc, Locate, List, Report};
+use super::loc::{self, Location, Loc, Locate, Report};
 use super::stream::{Stream};
 use super::{enums, lexer};
 use enums::{Separator, BracketKind as BK, Op, Associativity, Precedence, OpInfo, ItemWord};
@@ -26,7 +26,7 @@ fn read_non_comment(input: &mut impl Stream<Item=Loc<Lexeme>>)
 
 /// A `T` and its documentation.
 #[derive(Clone)]
-pub struct Doc<T>(pub T, pub List<Comment>);
+pub struct Doc<T>(pub T, pub Box<[Loc<Comment>]>);
 
 impl Doc<Item> {
     /// Parse a [`Item`] preceded by zero or more [`Comment`]s.

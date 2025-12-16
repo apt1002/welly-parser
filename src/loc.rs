@@ -81,32 +81,6 @@ impl<T> Locate for Loc<T> {
 
 // ----------------------------------------------------------------------------
 
-/// A list of [`Loc<T>`]s.
-#[derive(Clone)]
-pub struct List<T>(Box<[Loc<T>]>);
-
-impl<T> List<T> {
-    /// Returns a [`Location`] encompassing the whole `List`,
-    /// or `None` if the `List` is empty.
-    pub fn loc(&self) -> Option<Location> {
-        if self.0.len() == 0 { return None; }
-        Some(Location {
-            start: self.0.first().unwrap().1.start,
-            end: self.0.last().unwrap().1.end,
-        })
-    }
-}
-
-impl<T: fmt::Debug> fmt::Debug for List<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.0.fmt(f) }
-}
-
-impl<T, U> From<U> for List<T> where Box<[Loc<T>]>: From<U> {
-    fn from(value: U) -> Self { Self(value.into()) }
-}
-
-// ----------------------------------------------------------------------------
-
 /// Report a complicated error to the user.
 pub trait Report {
     /// Report `self` by calling `log()` one or more times.
@@ -121,10 +95,10 @@ pub enum Error {
     /// Otherwise it indicates that we need more input from the user.
     InsufficientInput,
 
-    /// Many errors have a constant message and just one [`Location`].
+    /// An error with a constant message and just one [`Location`].
     Str(&'static str, Location),
 
-    /// Catch-all for complicated cases.
+    /// A more complicated error.
     Report(Box<dyn Report>),
 }
 
