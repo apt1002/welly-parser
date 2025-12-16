@@ -116,7 +116,7 @@ fn is_alphanumeric_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '_'
 }
 
-///
+/// Wraps the lookup tables needed to run the lexer.
 pub struct Lexer {
     keywords: HashMap<&'static str, Lexeme>,
 }
@@ -295,8 +295,8 @@ impl Lexer {
     /// Returns:
     /// - Ok(None) - discard some input (e.g. whitespace).
     /// - Ok(Some(l)) - found a [`Lexeme`] `l`.
-    /// - Err(None) - stream is empty.
-    /// - Err(Some(e)) - found an error `e`.
+    /// - Err(loc::Error::InsufficientInput) - stream is empty.
+    /// - Err(e) - found an error `e`.
     pub fn lex(&self, input: &mut impl Stream<Item=Loc<char>>)
     -> loc::Result<Option<Loc<Lexeme>>> {
         let c = input.read()?;
