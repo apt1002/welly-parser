@@ -27,14 +27,14 @@ obj Single[T]($item: T) {
     }
 }
 
-obj Vec[T] {
-    fn new(): Self { ... }
-    fn push(&self, item: T) { ... }
+obj Vec[T]( ... ) {
+    fn new(): Self { ...; }
+    fn push(&self, item: T) { ...; }
 
     impl Sequence {
-        fn len(&self) { ... }
-        fn get(& $self, i) { ... }
-        fn borrow[U](&self, i: Int, borrower: (fn(&T): U)): U { ... }
+        fn len(&self) { ...; }
+        fn get(& $self, i) { ...; }
+        fn borrow[U](&self, i: Int, borrower: (fn(&T): U)): U { ...; }
     }
 }
 

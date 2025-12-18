@@ -18,7 +18,7 @@ WarpTarget = STRUCTURE[Xy, Address]
     | NONE[];
 
 fn get_warp_target(warp: String): WarpTarget {
-    ...
+    ...;
 }
 
 fn main(): OK[] | ErrorLocating {
@@ -79,13 +79,13 @@ fn test_truth() {
 //    return FilePath(filename)?.open()?.read()?
 // }
 
-obj FilePath {
+obj FilePath() {
     fn new(s: String): OK[FilePath] | io.Error {
-        .....
+        ...;
     }
 
     fn open(self): OK[Reader] | io.Error {
-        ....
+        ...;
     }
 
 }

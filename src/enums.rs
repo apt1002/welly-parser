@@ -34,6 +34,9 @@ pub enum Separator {Comma, Semicolon}
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u8)]
 pub enum Op {
+    /// `...` marks unfinished code.
+    ToDo,
+
     /// The value `true`.
     True,
 
@@ -266,7 +269,7 @@ pub const ALL_OP_WORDS: [(&'static str, OpWord); 39] = [
     (">=+", OpWord::new(OpInfo::infix(Op::UGE, Precedence::Cmp))),
     ("<>", OpWord::new(OpInfo::infix(Op::LG, Precedence::Cmp))),
     ("..", OpWord::new(OpInfo::infix(Op::Exclusive, Precedence::Range))),
-    ("...", OpWord::new(OpInfo::infix(Op::Inclusive, Precedence::Range))),
+    ("...", OpWord::new_pun(OpInfo::infix(Op::Inclusive, Precedence::Range), OpInfo::nonfix(Op::ToDo))),
     (":", OpWord::new(OpInfo::infix(Op::Cast, Precedence::Cast))),
     ("<<", OpWord::new(OpInfo::infix(Op::SL, Precedence::Shift))),
     (">>", OpWord::new(OpInfo::infix(Op::SSR, Precedence::Shift))),

@@ -2,7 +2,7 @@ use std::{fmt};
 
 use super::{enums, loc, Validate, Name, Selector, Expr};
 use enums::{BracketKind, Op};
-use loc::{Loc, Locate};
+use loc::{Location, Loc, Locate};
 
 pub const BAD_PATTERN: &'static str = "This expression is not assignable";
 
@@ -58,6 +58,9 @@ pub enum Pattern {
     /// Bind the value to a `Name`.
     Name(Mode, Loc<Name>),
 
+    /// Marks unfinished code.
+    ToDo(Location),
+
     /// Unpack a tuple's fields.
     Group(Loc<Box<Pattern>>),
 
@@ -88,6 +91,7 @@ impl Pattern {
                 for expr in exprs.0 { patterns.push(Self::from_expr_mode(expr, mode)?); }
                 Self::Tuple(Loc(patterns.into(), exprs.1))
             },
+            Expr::Op(None, Loc(Op::ToDo, todo_loc), None) => Self::ToDo(todo_loc),
             Expr::Op(None, Loc(Op::Share, _), Some(expr)) => Self::from_expr_mode(*expr, mode.share())?,
             Expr::Op(None, Loc(Op::Lend, _), Some(expr)) => Self::from_expr_mode(*expr, mode.lend())?,
             Expr::Op(Some(expr), Loc(Op::Cast, _), Some(type_)) => {
@@ -112,6 +116,7 @@ impl fmt::Debug for Pattern {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Name(mode, name) => write!(f, "{:?} {:?}", mode, name),
+            Self::ToDo(_) => write!(f, "TODO"),
             Self::Group(pattern) => f.debug_tuple("Group").field(&pattern.0).finish(),
             Self::Tuple(patterns) => {
                 let mut t = f.debug_tuple("Tuple");
@@ -128,6 +133,7 @@ impl Locate for Pattern {
     fn loc_start(&self) -> usize {
         match self {
             Self::Name(_, name) => name.loc_start(),
+            Self::ToDo(todo) => todo.loc_start(),
             Self::Group(pattern) => pattern.loc_start(),
             Self::Tuple(tuple) => tuple.loc_start(),
             Self::Cast(pattern, _) => pattern.loc_start(),
@@ -138,6 +144,7 @@ impl Locate for Pattern {
     fn loc_end(&self) -> usize {
         match self {
             Self::Name(_, name) => name.loc_end(),
+            Self::ToDo(todo) => todo.loc_end(),
             Self::Group(pattern) => pattern.loc_end(),
             Self::Tuple(tuple) => tuple.loc_end(),
             Self::Cast(_, type_) => type_.loc_end(),
