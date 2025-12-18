@@ -1,7 +1,7 @@
 use std.iter.Iterator;
 use std.iter.Iterable;
 
-obj Sequence[T] {
+trait Sequence[T] {
     fn len(self): Int;
     fn get(& $self, i: Int): $T;
     fn borrow[U](&self, i: Int, borrower: (fn(&T): U)): U;
@@ -17,7 +17,7 @@ obj Single[T]($item: T) {
 
         fn get(& $self, i) {
             if i!=0 { panic(); }
-            $self.item
+            return $self.item;
         }
 
         fn borrow[U](&self, i, borrower) {
@@ -69,4 +69,3 @@ obj LinkedList[T](items: Link[T]) {
         }
     }
 }
-

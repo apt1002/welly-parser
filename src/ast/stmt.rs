@@ -5,15 +5,17 @@ use enums::{BracketKind, Separator, Op, ItemWord};
 use loc::{Location, Loc, Locate};
 use parser::{Doc, Item};
 
+pub const MISSING_STMT: &'static str = "Expected a statement";
 pub const MISSING_LHS: &'static str = "Expected a pattern before this assignment operator";
 pub const MISSING_RHS: &'static str = "Expected an expression after this assignment operator";
-pub const MISSING_NAME: &'static str = "Expected `name` after this keyword";
-pub const MISSING_CALL: &'static str = "Expected `expression( ... )`";
 pub const MISSING_EXPR: &'static str = "Expected an expression after this keyword";
+pub const BAD_ROUND: &'static str = "Expected `( ... )`";
+pub const MISSING_CALL: &'static str = "Expected `expression( ... )`";
 pub const MISSING_BLOCK: &'static str = "Expected `{ ... }` after this statement";
+pub const MISSING_NAME: &'static str = "Expected `name` after this keyword";
 pub const EXTRA_BLOCK: &'static str = "Unexpected `{ ... }`";
-pub const MISSING_STMT: &'static str = "Expected a statement";
 pub const EXTRA_EXPR: &'static str = "Unexpected expression";
+pub const BAD_TAG: &'static str = "Expected `TAG`";
 pub const EXTRA_ELSE: &'static str = "`else` must follow an `if`, `while` or `for` statement";
 pub const MISSING_SEMICOLON: &'static str = "This statement must be followed by `;`";
 
@@ -174,32 +176,28 @@ impl Validate<Item> for StmtOrElse {
                 let block = Option::<Loc<Block>>::validate(bracket)?;
                 match word.0 {
                     ItemWord::Module => {
-                        let name = Expr::to_optional_name(expr)?;
-                        if name.is_none() && block.is_none() { Err(Loc(MISSING_NAME, word.1))? }
-                        Stmt::Expr(Expr::Module(word.1, block).named(name))
+                        Stmt::Expr(Expr::Module(word.1, block).named(expr)?)
                     },
                     ItemWord::Object => {
                         let Some(expr) = expr else { Err(Loc(MISSING_EXPR, word.1))? };
-                        let (name, expr) = expr.remove_call(BracketKind::Round)?;
-                        let Some(name) = name else { Err(Loc(MISSING_CALL, expr.loc()))? };
-                        let name = name.to_name()?;
+                        let (name, expr) = expr.remove_function(BracketKind::Round);
+                        if expr.kind() != Some(BracketKind::Round) { Err(Loc(BAD_ROUND, expr.loc()))? }
                         let parameter = Pattern::from_expr(expr)?;
                         let Some(block) = block else { Err(Loc(MISSING_BLOCK, tree.loc()))? };
-                        Stmt::Expr(Expr::object(word.1, parameter, block).named(name))
+                        Stmt::Expr(Expr::object(word.1, parameter, block).named(name)?)
                     },
                     ItemWord::Function | ItemWord::Macro => {
                         let Some(expr) = expr else { Err(Loc(MISSING_EXPR, word.1))? };
                         let (expr, return_type) = expr.remove_cast();
-                        let (name, expr) = expr.remove_call(BracketKind::Round)?;
-                        let name = Expr::to_optional_name(name)?;
+                        let (name, expr) = expr.remove_function(BracketKind::Round);
+                        if expr.kind() != Some(BracketKind::Round) { Err(Loc(BAD_ROUND, expr.loc()))? }
                         let parameter = Pattern::from_expr(expr)?;
-                        Stmt::Expr(Expr::function(*word, parameter, return_type, block).named(name))
+                        Stmt::Expr(Expr::function(*word, parameter, return_type, block).named(name)?)
                     },
                     ItemWord::Trait => {
                         let Some(expr) = expr else { Err(Loc(MISSING_NAME, word.1))? };
-                        let name = expr.to_name()?;
                         let Some(block) = block else { Err(Loc(MISSING_BLOCK, tree.loc()))? };
-                        Stmt::Expr(Expr::Trait(word.1, block).named(name))
+                        Stmt::Expr(Expr::Trait(word.1, block).named(expr)?)
                     },
                     ItemWord::Implementation => {
                         let Some(expr) = expr else { Err(Loc(MISSING_NAME, word.1))? };
@@ -217,9 +215,10 @@ impl Validate<Item> for StmtOrElse {
                     },
                     ItemWord::Case => {
                         let Some(expr) = expr else { Err(Loc(MISSING_EXPR, word.1))? };
-                        let (tag, expr) = expr.remove_call(BracketKind::Round)?;
+                        let (tag, expr) = expr.remove_function(BracketKind::Round);
+                        if expr.kind() != Some(BracketKind::Round) { Err(Loc(BAD_ROUND, expr.loc()))? }
                         let Some(tag) = tag else { Err(Loc(MISSING_CALL, expr.loc()))? };
-                        let tag = tag.to_tag()?;
+                        let Expr::Tag(tag) = tag else { Err(Loc(BAD_TAG, tag.loc()))? };
                         let parameter = Pattern::from_expr(expr)?;
                         let Some(block) = block else { Err(Loc(MISSING_BLOCK, tree.loc()))? };
                         Stmt::case(word.1, tag, parameter, block)

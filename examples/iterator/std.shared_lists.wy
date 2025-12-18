@@ -16,14 +16,14 @@ trait SequenceOfRc<T> {
 }
 **/
 
-obj SequenceShared[T] {
+trait SequenceShared[T] {
     fn len(&self): Int;
 
     fn get(&self, i: Int): $T {
         self.borrow(i,
             fn(&$item: T): Shared[T] { return ($item,); }
         ).0;
-    };
+    }
 
     fn borrow[U](&self, i: Int, borrower: (fn(&$T): U)): U {
         $item = self.get(i);

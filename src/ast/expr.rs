@@ -9,9 +9,8 @@ use lexer::{Atom};
 
 pub const BAD_SELECTOR: &'static str = "Expected a field selector";
 pub const BAD_NAME: &'static str = "Expected `name`";
-pub const BAD_TAG: &'static str = "Expected `TAG`";
 pub const BAD_IN: &'static str = "Expected `pattern in sequence`";
-pub const BAD_CALL: &'static str = "Expected `( ... )`";
+pub const BAD_ROUND: &'static str = "Expected `( ... )`";
 pub const STMT_NOT_EXPR: &'static str = "This statement does not have a value";
 pub const BAD_ALPHANUMERIC: &'static str = "This is not an identifier, a tag or an integer";
 pub const MISSING_COMMA: &'static str = "Expected a comma after this expression";
@@ -69,8 +68,8 @@ impl From<ItemWord> for IsMacro {
 
 #[derive(Clone)]
 pub enum Expr {
-    /// An `Expr` that binds a `Name`.
-    Named(Loc<Name>, Box<Expr>),
+    /// An `Expr` that binds a `Name`. Optional generic argument.
+    Named(Loc<Name>, Option<Box<Expr>>, Box<Expr>),
 
     /// `mod name { ... }` defines a module.
     ///
@@ -133,9 +132,14 @@ pub enum Expr {
 }
 
 impl Expr {
-    /// Optionally wrap `self` in `Self::Named`.
-    pub fn named(self, name: impl Into<Option<Loc<Name>>>) -> Self {
-        if let Some(name) = name.into() { Self::Named(name, Box::new(self)) } else { self }
+    /// Optionally wrap `self` in `Self::Named.
+    ///
+    /// `self` must be `None`, `Some(name)` or `Some(name[arg])`.
+    pub fn named(self, name: impl Into<Option<Expr>>) -> loc::Result<Self> {
+        let Some(name) = name.into() else { return Ok(self); };
+        let (name, arg) = Self::remove_argument(name, BracketKind::Square);
+        let Expr::Name(name) = name else { Err(Loc(BAD_NAME, name.loc()))? };
+        Ok(Self::Named(name, arg.map(Box::new), Box::new(self)))
     }
 
     /// Construct a `Self::Object`.
@@ -190,29 +194,6 @@ impl Expr {
         }
     }
 
-    /// Checks that `self` is a `Name`.
-    pub fn to_name(self) -> loc::Result<Loc<Name>> {
-        let ret = match self{
-            Expr::Name(name) => name,
-            expr => Err(Loc(BAD_NAME, expr.loc()))?,
-        };
-        Ok(ret)
-    }
-
-    /// Checks that `self` is a `Name`.
-    pub fn to_optional_name(name: Option<Self>) -> loc::Result<Option<Loc<Name>>> {
-        Ok(if let Some(name) = name { Some(name.to_name()?) } else { None })
-    }
-
-    /// Checks that `self` is a `Tag`.
-    pub fn to_tag(self) -> loc::Result<Loc<Tag>> {
-        let ret = match self {
-            Expr::Tag(tag) => tag,
-            expr => Err(Loc(BAD_TAG, expr.loc()))?,
-        };
-        Ok(ret)
-    }
-
     /// Checks that `self` is of the form `pattern in sequence`.
     pub fn remove_in(self) -> loc::Result<(Pattern, Expr)> {
         let ret = match self {
@@ -231,24 +212,31 @@ impl Expr {
         }
     }
 
+    /// Checks whether `expr` is of the form `expr(arg)` or just `expr`.
+    /// Returns `(expr, arg)`.
+    pub fn remove_argument(self, kind: BracketKind) -> (Expr, Option<Expr>) {
+        match self {
+            Expr::Call(fn_, arg) if arg.kind() == Some(kind) => (*fn_, Some(*arg)),
+            expr => (expr, None),
+        }
+    }
+
     /// Checks whether `expr` is of the form `function(expr)` or just `(expr)`.
     /// `expr` must be an [`Expr::Group`] or an [`Expr::Tuple`] of `kind`.
     /// Returns `(function, expr)`.
-    pub fn remove_call(self, kind: BracketKind) -> loc::Result<(Option<Expr>, Expr)> {
-        let (function, expr) = match self {
-            Expr::Call(function, expr) if expr.kind() == Some(kind) => (Some(*function), *expr),
+    pub fn remove_function(self, kind: BracketKind) -> (Option<Expr>, Expr) {
+        match self {
+            Expr::Call(fn_, arg) if arg.kind() == Some(kind) => (Some(*fn_), *arg),
             expr => (None, expr),
-        };
-        if expr.kind() != Some(kind) { Err(Loc(BAD_CALL, expr.loc()))? }
-        Ok((function, expr))
+        }
     }
 }
 
 impl std::fmt::Debug for Expr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Named(name, expr) =>
-                f.debug_tuple("Named").field(name).field(expr).finish(),
+            Self::Named(name, argument, expr) =>
+                f.debug_tuple("Named").field(name).field(argument).field(expr).finish(),
             Self::Module(word, block) => {
                 let mut t = f.debug_tuple("Module");
                 t.field(word);
@@ -297,7 +285,7 @@ impl std::fmt::Debug for Expr {
 impl Locate for Expr {
     fn loc_start(&self) -> usize {
         match self {
-            Self::Named(_, expr) => expr.loc_start(),
+            Self::Named(_, _, expr) => expr.loc_start(),
             Self::Module(word, _) => word.loc_start(),
             Self::Object(word, _, _) => word.loc_start(),
             Self::Function(is_macro, _, _, _) => is_macro.loc_start(),
@@ -320,8 +308,8 @@ impl Locate for Expr {
 
     fn loc_end(&self) -> usize {
         match self {
-            Self::Named(name, expr) => match &**expr {
-                Self::Module(_, None) => name.loc_end(),
+            Self::Named(name, argument, expr) => match &**expr {
+                Self::Module(_, None) => if let Some(a) = argument { a.loc_end() } else { name.loc_end() },
                 _ => expr.loc_end(),
             },
             Self::Module(_, Some(block)) => block.loc_end(),
@@ -390,10 +378,10 @@ impl Validate<Formula> for Expr {
                     Op::Structure => {
                         assert!(left.is_none(), "Structure has no left operand");
                         let right = right.expect("Structure has a right operand");
-                        let (name, right) = right.remove_call(BracketKind::Round)?;
-                        let name = Self::to_optional_name(name)?;
-                        let pattern = Pattern::from_expr(right)?;
-                        Self::structure(op.1, pattern).named(name)
+                        let (name, pattern) = right.remove_function(BracketKind::Round);
+                        if pattern.kind() != Some(BracketKind::Round) { Err(Loc(BAD_ROUND, pattern.loc()))? }
+                        let pattern = Pattern::from_expr(pattern)?;
+                        Self::structure(op.1, pattern).named(name)?
                     },
                     Op::Dot => {
                         let left = left.expect("Dot has a left operand");

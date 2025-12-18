@@ -4,7 +4,7 @@ fn main() {
     a = Vec.new();
     _ = (&a).push(4);
 
-    std.iter.ForEach.for_each(a, obj{
+    std.iter.ForEach.for_each(a, obj() {
         fn run(self, item: Int): BREAK[] | CONTINUE[] {
             _ = print(item);
             CONTINUE();
@@ -17,6 +17,3 @@ fn main() {
         item == 4;
     }));
 }
-
-
-

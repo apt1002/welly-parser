@@ -1,4 +1,4 @@
-obj Eq[Rhs] {
+trait Eq[Rhs] {
     fn eq(&self, &other: Rhs): Bool;
 
     fn ne(&self, &other: Rhs): Bool {
@@ -6,5 +6,3 @@ obj Eq[Rhs] {
         not self.eq(other);
     }
 }
-
-Shared[T] = tuple($T);
