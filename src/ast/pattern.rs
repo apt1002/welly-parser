@@ -1,10 +1,12 @@
 use std::{fmt};
 
-use super::{enums, loc, Validate, Name, Selector, Expr};
+use super::{enums, loc, Validate, Name, Tag, Selector, Expr};
 use enums::{BracketKind, Op};
 use loc::{Location, Loc, Locate};
 
 pub const BAD_PATTERN: &'static str = "This expression is not assignable";
+pub const MISSING_CALL: &'static str = "Expected `expression( ... )`";
+pub const BAD_TAG: &'static str = "Expected `TAG`";
 
 // ----------------------------------------------------------------------------
 
@@ -155,4 +157,79 @@ impl Locate for Pattern {
 
 impl<T> Validate<T> for Pattern where Expr: Validate<T> {
     fn validate(tree: &T) -> loc::Result<Self> { Ok(Self::from_expr(Expr::validate(tree)?)?) }
+}
+
+// ----------------------------------------------------------------------------
+
+/// Represents `TAG(pattern)`.
+#[derive(Clone)]
+pub struct TaggedPattern(pub Loc<Tag>, pub Pattern);
+
+impl TaggedPattern {
+    pub fn from_expr(expr: Expr) -> loc::Result<Self> {
+        let expr_loc = expr.loc();
+        let (function, argument) = expr.remove_argument(BracketKind::Round);
+        let Some(argument) = argument else { Err(Loc(MISSING_CALL, expr_loc))? };
+        let Expr::Tag(tag) = function else { Err(Loc(BAD_TAG, function.loc()))? };
+        Ok(Self(tag, Pattern::from_expr(argument)?))
+    }
+}
+
+impl fmt::Debug for TaggedPattern {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_tuple(&format!("{:?}", self.0)).field(&self.1).finish()
+    }
+}
+
+// ----------------------------------------------------------------------------
+
+/// A list of [`TaggedPattern`]s, or a catch-all name.
+///
+/// This syntax used in `case <refutable-pattern> { ... }` statements.
+#[derive(Clone)]
+pub enum RefutablePattern {
+    Anything(Loc<Name>),
+    Union(Box<[TaggedPattern]>)
+}
+
+impl RefutablePattern {
+    pub fn from_expr(mut expr: Expr) -> loc::Result<Self> {
+        if let Expr::Name(name) = expr { return Ok(Self::Anything(name)); }
+        let mut exprs = Vec::new();
+        while let Expr::Op(Some(head), Loc(Op::Union, _), Some(tail)) = expr {
+            exprs.push(TaggedPattern::from_expr(*head)?);
+            expr = *tail;
+        }
+        exprs.push(TaggedPattern::from_expr(expr)?);
+        Ok(Self::Union(exprs.into()))
+    }
+}
+
+impl fmt::Debug for RefutablePattern {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Anything(name) => f.debug_tuple("Anything").field(name).finish(),
+            Self::Union(patterns) => {
+                let mut t = f.debug_tuple("Union");
+                for pattern in patterns { t.field(pattern); }
+                t.finish()
+            },
+        }
+    }
+}
+
+impl Locate for RefutablePattern {
+    fn loc_start(&self) -> usize {
+        match self {
+            Self::Anything(name) => name.loc_start(),
+            Self::Union(patterns) => patterns.first().expect("Empty union").0.loc_start(),
+        }
+    }
+
+    fn loc_end(&self) -> usize {
+        match self {
+            Self::Anything(name) => name.loc_end(),
+            Self::Union(patterns) => patterns.last().expect("Empty union").1.loc_end(),
+        }
+    }
 }

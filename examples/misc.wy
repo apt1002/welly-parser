@@ -25,18 +25,17 @@ fn main(): OK[] | ErrorLocating {
     cli_warp = "my address";
 
     match get_warp_target(cli_warp, ...);
-    case STRUCTURE(start_at, address) { position = start_at; }
-    case POSITION(start_at) { position = start_at; }
-    case NO_RECEIVER(address) { return ERROR("no receiver"); }
-    case NO_PATH(address) { return ERROR("no path"); }
-    case NONE() { return ERROR("nothing supplied"); } // NONE()?
+    case STRUCTURE(position, _) | POSITION(position) {}
+    case NO_RECEIVER(_) { return ERROR("no receiver"); }
+    case NO_PATH(_) { return ERROR("no path"); }
+    case NONE() { return ERROR("nothing supplied"); }
 
     _ = debug(position);
     start_game(position);
 }
 
 
-
+// Aspiration: Int cases.
 fn fib(n: Int): Int {
     match n;
     case 0 | 1 { return 1; }
@@ -49,16 +48,17 @@ fn greet(s: Status) {
     case _ { return; }
 }
 
-mac truthy(input) {
+// Aspiration: type cases.
+macro truthy(input) {
     match Dyn(input);
-    case 0: Int { false }
-    case x: String { x.len() == 0 }
-    case false: Bool { false }
-    case OK(_): OK[Dyn] { true }
-    case x: (obj { fn truthy(self): Bool }) { x.truthy() }
-    case x: Array[Dyn] { x.len() == 0 }
-    case _: FalseThing { false }
-    case _ { true }
+    case 0: Int { return false; }
+    case x: String { return x.len() == 0; }
+    case false: Bool { return false; }
+    case OK(_): OK[Dyn] { return true; }
+    case x: (obj { fn truthy(self): Bool }) { return x.truthy(); }
+    case x: Array[Dyn] { return x.len() == 0; }
+    case _: FalseThing { return false; }
+    case _ { return true; }
 }
 
 fn test_truth() {

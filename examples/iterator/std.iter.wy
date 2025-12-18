@@ -33,7 +33,6 @@ trait ForEach[T] {
             case SOME(item) { match Run.run(body, item); }
             case CONTINUE() {}
         }
-        case NONE() {}
-        case BREAK() {}
+        case NONE() | BREAK() {}
     }
 }

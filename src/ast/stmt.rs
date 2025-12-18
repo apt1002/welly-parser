@@ -1,6 +1,6 @@
 use std::{fmt};
 
-use super::{enums, loc, parser, Validate, Tag, Expr, Pattern};
+use super::{enums, loc, parser, Validate, Expr, Pattern, RefutablePattern};
 use enums::{BracketKind, Separator, Op, ItemWord};
 use loc::{Location, Loc, Locate};
 use parser::{Doc, Item};
@@ -10,12 +10,10 @@ pub const MISSING_LHS: &'static str = "Expected a pattern before this assignment
 pub const MISSING_RHS: &'static str = "Expected an expression after this assignment operator";
 pub const MISSING_EXPR: &'static str = "Expected an expression after this keyword";
 pub const BAD_ROUND: &'static str = "Expected `( ... )`";
-pub const MISSING_CALL: &'static str = "Expected `expression( ... )`";
 pub const MISSING_BLOCK: &'static str = "Expected `{ ... }` after this statement";
 pub const MISSING_NAME: &'static str = "Expected `name` after this keyword";
 pub const EXTRA_BLOCK: &'static str = "Unexpected `{ ... }`";
 pub const EXTRA_EXPR: &'static str = "Unexpected expression";
-pub const BAD_TAG: &'static str = "Expected `TAG`";
 pub const EXTRA_ELSE: &'static str = "`else` must follow an `if`, `while` or `for` statement";
 pub const MISSING_SEMICOLON: &'static str = "This statement must be followed by `;`";
 
@@ -63,7 +61,7 @@ pub enum Stmt {
     Match(Location, Box<Expr>),
 
     /// `case TAG( ... ) { ... }` is a target for `match`.
-    Case(Location, Loc<Tag>, Box<Pattern>, Loc<Block>),
+    Case(Location, RefutablePattern, Loc<Block>),
 
     /// Execute `body` and/or `else` depending on `control`.
     /// The `else` [`Block`] is optional.
@@ -93,8 +91,8 @@ impl Stmt {
     pub fn match_(word: Location, expr: Expr) -> Self { Self::Match(word, Box::new(expr)) }
 
     /// Construct a `Self::Case`.
-    pub fn case(word: Location, tag: Loc<Tag>, parameter: Pattern, block: Loc<Block>) -> Self {
-        Self::Case(word, tag, Box::new(parameter), block)
+    pub fn case(word: Location, pattern: RefutablePattern, block: Loc<Block>) -> Self {
+        Self::Case(word, pattern, block)
     }
 
     /// Constructs a `Self::Control` containing a `Control::If`.
@@ -121,7 +119,7 @@ impl Locate for Stmt {
             Self::Implementation(word, _, _) => word.loc_start(),
             Self::Return(word, _) => word.loc_start(),
             Self::Match(word, _) => word.loc_start(),
-            Self::Case(word, _, _, _) => word.loc_start(),
+            Self::Case(word, _, _) => word.loc_start(),
             Self::Control(word, _, _, _) => word.loc_start(),
             Self::Block(block) => block.loc_start(),
         }
@@ -135,7 +133,7 @@ impl Locate for Stmt {
             Self::Return(_, Some(expr)) => expr.loc_end(),
             Self::Return(word, None) => word.loc_end(),
             Self::Match(_, expr) => expr.loc_end(),
-            Self::Case(_, _, _, block) => block.loc_end(),
+            Self::Case(_, _, block) => block.loc_end(),
             Self::Control(_, _, _, Some(block)) => block.loc_end(),
             Self::Control(_, _, block, None) => block.loc_end(),
             Self::Block(block) => block.loc_end(),
@@ -180,10 +178,10 @@ impl Validate<Item> for StmtOrElse {
                     },
                     ItemWord::Object => {
                         let Some(expr) = expr else { Err(Loc(MISSING_EXPR, word.1))? };
+                        let Some(block) = block else { Err(Loc(MISSING_BLOCK, tree.loc()))? };
                         let (name, expr) = expr.remove_function(BracketKind::Round);
                         if expr.kind() != Some(BracketKind::Round) { Err(Loc(BAD_ROUND, expr.loc()))? }
                         let parameter = Pattern::from_expr(expr)?;
-                        let Some(block) = block else { Err(Loc(MISSING_BLOCK, tree.loc()))? };
                         Stmt::Expr(Expr::object(word.1, parameter, block).named(name)?)
                     },
                     ItemWord::Function | ItemWord::Macro => {
@@ -215,13 +213,9 @@ impl Validate<Item> for StmtOrElse {
                     },
                     ItemWord::Case => {
                         let Some(expr) = expr else { Err(Loc(MISSING_EXPR, word.1))? };
-                        let (tag, expr) = expr.remove_function(BracketKind::Round);
-                        if expr.kind() != Some(BracketKind::Round) { Err(Loc(BAD_ROUND, expr.loc()))? }
-                        let Some(tag) = tag else { Err(Loc(MISSING_CALL, expr.loc()))? };
-                        let Expr::Tag(tag) = tag else { Err(Loc(BAD_TAG, tag.loc()))? };
-                        let parameter = Pattern::from_expr(expr)?;
                         let Some(block) = block else { Err(Loc(MISSING_BLOCK, tree.loc()))? };
-                        Stmt::case(word.1, tag, parameter, block)
+                        let pattern = RefutablePattern::from_expr(expr)?;
+                        Stmt::case(word.1, pattern, block)
                     },
                     ItemWord::If => {
                         let Some(expr) = expr else { Err(Loc(MISSING_NAME, word.1))? };
@@ -235,8 +229,8 @@ impl Validate<Item> for StmtOrElse {
                     },
                     ItemWord::For => {
                         let Some(expr) = expr else { Err(Loc(MISSING_NAME, word.1))? };
-                        let (pattern, sequence) = expr.remove_in()?;
                         let Some(block) = block else { Err(Loc(MISSING_BLOCK, tree.loc()))? };
+                        let (pattern, sequence) = expr.remove_in()?;
                         Stmt::for_(word.1, pattern, sequence, block)
                     },
                     ItemWord::Else => {

@@ -34,4 +34,4 @@ mod expr;
 pub use expr::{Expr, Selector};
 
 mod pattern;
-pub use pattern::{Mode, Pattern};
+pub use pattern::{Mode, Pattern, RefutablePattern};
