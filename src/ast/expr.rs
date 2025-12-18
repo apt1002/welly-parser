@@ -357,7 +357,7 @@ impl Validate<Formula> for Expr {
     fn validate(tree: &Formula) -> loc::Result<Self> {
         let ret = match tree {
             Formula::Atom(atom) => Self::validate(atom)?,
-            Formula::Group(kind, bracket) => {
+            Formula::Bracket(kind, bracket) => {
                 match CommaSeparated::validate(&bracket.0)?.number() {
                     Number::One(expr) => Self::group(*kind, Loc(expr, bracket.1)),
                     Number::Many(exprs) => Self::tuple(*kind, Loc(exprs, bracket.1)),

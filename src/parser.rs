@@ -34,8 +34,8 @@ fn read_non_comment(input: &mut impl Stream<Item=Loc<Lexeme>>)
     }
 }
 
-/// Represents a sequence of [`Item`] inside brackets.
-type Bracket = Box<[Doc<Item>]>;
+/// Represents a sequence of [`Item`]s.
+type ItemList = Box<[Doc<Item>]>;
 
 // ----------------------------------------------------------------------------
 
@@ -72,13 +72,13 @@ pub enum Formula {
     Atom(Loc<Atom>),
 
     /// Something enclosed in round brackets.
-    Group(BracketKind, Loc<Bracket>),
+    Bracket(BracketKind, Loc<ItemList>),
 
     /// An arithmetic operator applied to up to two arguments.
     Op(Option<Box<Formula>>, Loc<Op>, Option<Box<Formula>>),
 
     /// A `Formula` followed by round brackets.
-    Call(BracketKind, Box<Formula>, Loc<Bracket>),
+    Call(BracketKind, Box<Formula>, Loc<ItemList>),
 }
 
 impl Formula {
@@ -104,7 +104,7 @@ impl Formula {
                     },
                 }
             },
-            Lexeme::Open(kind) => Self::Group(*kind, parse_bracket(Loc(*kind, l.1), input)?),
+            Lexeme::Open(kind) => Self::Bracket(*kind, parse_bracket(Loc(*kind, l.1), input)?),
             _ => {
                 input.unread(l);
                 return Ok(None);
@@ -160,8 +160,8 @@ impl fmt::Debug for Formula {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Atom(atom) => atom.fmt(f),
-            Self::Group(kind, bracket) =>
-                f.debug_tuple(&format!("{:?} Group", kind)).field(&bracket.0).finish(),
+            Self::Bracket(kind, bracket) =>
+                f.debug_tuple(&format!("{:?} Bracket", kind)).field(&bracket.0).finish(),
             Self::Op(left, op, right) => {
                 let mut t = f.debug_tuple("Op");
                 if let Some(left) = left { t.field(left); }
@@ -180,7 +180,7 @@ impl Locate for Formula {
     fn loc_start(&self) -> usize {
         match self {
             Self::Atom(l) => l.1.start,
-            Self::Group(_, l) => l.1.start,
+            Self::Bracket(_, l) => l.1.start,
             Self::Op(Some(left), _, _) => left.loc_start(),
             Self::Op(None, l, _) => l.1.start,
             Self::Call(_, left, _) => left.loc_start(),
@@ -191,7 +191,7 @@ impl Locate for Formula {
     fn loc_end(&self) -> usize {
         match self {
             Self::Atom(l) => l.1.end,
-            Self::Group(_, l) => l.1.end,
+            Self::Bracket(_, l) => l.1.end,
             Self::Op(_, _, Some(right)) => right.loc_end(),
             Self::Op(_, l, None) => l.1.end,
             Self::Call(_, _, l) => l.1.end,
@@ -201,10 +201,10 @@ impl Locate for Formula {
 
 // ----------------------------------------------------------------------------
 
-/// Parse a [`Bracket`] starting after an open round or square bracket.
+/// Parse an [`ItemList`] starting after an open round or square bracket.
 /// - open - the open bracket.
 pub fn parse_bracket(open: Loc<BracketKind>, input: &mut impl Stream<Item=Loc<Lexeme>>)
--> loc::Result<Loc<Bracket>> {
+-> loc::Result<Loc<ItemList>> {
     let mut contents = Vec::new();
     loop {
         let l = read_non_comment(input)?;
@@ -241,10 +241,10 @@ pub enum Item {
     /// `keyword expr { ... }`.
     ///
     /// The meaning depends on the keyword. See [`ItemWord`].
-    Verb(Loc<ItemWord>, Option<Formula>, Option<Loc<Bracket>>),
+    Verb(Loc<ItemWord>, Option<Formula>, Option<Loc<ItemList>>),
 
     /// Something enclosed in curly brackets.
-    Block(Loc<Bracket>)
+    Block(Loc<ItemList>)
 }
 
 impl Item {
@@ -315,9 +315,9 @@ impl fmt::Debug for Item {
                 if let Some(block) = block { t.field(block); }
                 t.finish()
             },
-            Self::Block(bracket) => {
+            Self::Block(block) => {
                 let mut t = f.debug_tuple("Block");
-                for item in &bracket.0 { t.field(item); }
+                for item in &block.0 { t.field(item); }
                 t.finish()
             }
         }
@@ -352,10 +352,10 @@ impl Locate for Item {
 
 // ----------------------------------------------------------------------------
 
-/// Parse a [`Bracket`] starting after an open curly bracket.
+/// Parse a [`ItemList`] starting after an open curly bracket.
 /// - open - the open bracket.
 pub fn parse_curly(open: Location, input: &mut impl Stream<Item=Loc<Lexeme>>)
--> loc::Result<Loc<Bracket>> {
+-> loc::Result<Loc<ItemList>> {
     let mut contents = Vec::new();
     loop {
         let l = read_non_comment(input)?;
