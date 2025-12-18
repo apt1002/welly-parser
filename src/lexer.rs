@@ -97,10 +97,16 @@ pub enum Lexeme {
     /// A comma or semicolon.
     Separator(Separator),
 
-    /// An open bracket character.
+    /// An open curly bracket character.
+    OpenCurly,
+
+    /// A close curly bracket character.
+    CloseCurly,
+
+    /// An open round or square bracket character.
     Open(BracketKind),
 
-    /// A close bracket character.
+    /// A close round or square bracket character.
     Close(BracketKind),
 }
 
@@ -310,8 +316,8 @@ impl Lexer {
             ')' => Lexeme::Close(BracketKind::Round),
             '[' => Lexeme::Open(BracketKind::Square),
             ']' => Lexeme::Close(BracketKind::Square),
-            '{' => Lexeme::Open(BracketKind::Curly),
-            '}' => Lexeme::Close(BracketKind::Curly),
+            '{' => Lexeme::OpenCurly,
+            '}' => Lexeme::CloseCurly,
             '/' => {
                 let c2 = input.read()?;
                 match c2.0 {

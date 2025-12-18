@@ -2,7 +2,7 @@ use std::{fmt};
 use std::rc::{Rc};
 
 use super::{enums, loc, parser, lexer, Validate, Name, Tag, Pattern, Stmt, Block};
-use enums::{Separator, Op, ItemWord};
+use enums::{BracketKind, Separator, Op, ItemWord};
 use loc::{Location, Loc, Locate};
 use parser::{Doc, Formula, Item};
 use lexer::{Atom};
@@ -109,13 +109,11 @@ pub enum Expr {
     Name(Loc<Name>),
 
     /// An `Expr` in brackets.
-    Group(Loc<Box<Expr>>),
+    Group(BracketKind, Loc<Box<Expr>>),
 
     /// `( ... )` constructs a tuple.
-    Tuple(Loc<Box<[Expr]>>),
-
     /// `[ ... ]` constructs a tuple type.
-    TupleType(Loc<Box<[Expr]>>),
+    Tuple(BracketKind, Loc<Box<[Expr]>>),
 
     /// `struct name( ... )` constructs a tuple type with names.
     Structure(Location, Box<Pattern>),
@@ -130,6 +128,7 @@ pub enum Expr {
     Op(Option<Box<Expr>>, Loc<Op>, Option<Box<Expr>>),
 
     /// `expr( ... )` calls `expr` passing arguments.
+    /// `expr[ ... ]` instantiates `expr` passing arguments.
     Call(Box<Expr>, Box<Expr>),
 }
 
@@ -155,13 +154,14 @@ impl Expr {
     }
 
     /// Construct a `Self::Group`.
-    pub fn group(expr: Loc<Self>) -> Self { Self::Group(Loc(Box::new(expr.0), expr.1)) }
+    pub fn group(kind: BracketKind, expr: Loc<Self>) -> Self {
+        Self::Group(kind, Loc(Box::new(expr.0), expr.1))
+    }
 
     /// Construct a `Self::Tuple`.
-    pub fn tuple(args: Loc<impl Into<Box<[Expr]>>>) -> Self { Self::Tuple(Loc(args.0.into(), args.1)) }
-
-    /// Construct a `Self::TupleType`.
-    pub fn tuple_type(args: Loc<impl Into<Box<[Expr]>>>) -> Self { Self::TupleType(Loc(args.0.into(), args.1)) }
+    pub fn tuple(kind: BracketKind, args: Loc<impl Into<Box<[Expr]>>>) -> Self {
+        Self::Tuple(kind, Loc(args.0.into(), args.1))
+    }
 
     /// Construct a `Self::Structure`.
     pub fn structure(word: Location, pattern: Pattern) -> Self { Self::Structure(word, Box::new(pattern)) }
@@ -178,7 +178,17 @@ impl Expr {
     }
 
     /// Construct a `Self::Call`.
-    pub fn call(self, arg: Self) -> Self { Self::Call(Box::new(self), Box::new(arg)) }
+    pub fn call(self, arg: Self) -> Self {
+        Self::Call(Box::new(self), Box::new(arg))
+    }
+
+    /// If `self` is a `Group` or `Tuple`, return its [`BracketKind`].
+    pub fn kind(&self) -> Option<BracketKind> {
+        match self {
+            Self::Group(kind, _) | Self::Tuple(kind, _) => Some(*kind),
+            _ => None,
+        }
+    }
 
     /// Checks that `self` is a `Name`.
     pub fn to_name(self) -> loc::Result<Loc<Name>> {
@@ -221,14 +231,15 @@ impl Expr {
         }
     }
 
-    /// Checks whether `expr` is of the form `function(expr)` or just `expr`.
-    /// `expr` can be an [`Expr::Group`] or an [`Expr::Tuple`].
-    pub fn remove_call(self) -> loc::Result<(Option<Expr>, Expr)> {
+    /// Checks whether `expr` is of the form `function(expr)` or just `(expr)`.
+    /// `expr` must be an [`Expr::Group`] or an [`Expr::Tuple`] of `kind`.
+    /// Returns `(function, expr)`.
+    pub fn remove_call(self, kind: BracketKind) -> loc::Result<(Option<Expr>, Expr)> {
         let (function, expr) = match self {
-            Expr::Call(function, expr) => (Some(*function), *expr),
+            Expr::Call(function, expr) if expr.kind() == Some(kind) => (Some(*function), *expr),
             expr => (None, expr),
         };
-        if !matches!(&expr, Expr::Group(_) | Expr::Tuple(_)) { Err(Loc(BAD_CALL, expr.loc()))? }
+        if expr.kind() != Some(kind) { Err(Loc(BAD_CALL, expr.loc()))? }
         Ok((function, expr))
     }
 }
@@ -236,40 +247,40 @@ impl Expr {
 impl std::fmt::Debug for Expr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Named(name, expr) => f.debug_tuple("Named").field(name).field(expr).finish(),
+            Self::Named(name, expr) =>
+                f.debug_tuple("Named").field(name).field(expr).finish(),
             Self::Module(word, block) => {
                 let mut t = f.debug_tuple("Module");
                 t.field(word);
                 if let Some(block) = block { t.field(block); }
                 t.finish()
             },
-            Self::Object(word, pattern, block) => {
-                f.debug_tuple("Object").field(word).field(pattern).field(block).finish()
-            },
+            Self::Object(word, pattern, block) =>
+                f.debug_tuple("Object").field(word).field(pattern).field(block).finish(),
             Self::Function(is_macro, pattern, return_type, block) => {
                 let mut t = f.debug_tuple(if is_macro.0.0 { "Macro" } else { "Function" });
                 t.field(pattern).field(return_type).field(block).finish()
             },
-            Self::Trait(word, block) => f.debug_tuple("Trait").field(word).field(block).finish(),
+            Self::Trait(word, block) =>
+                f.debug_tuple("Trait").field(word).field(block).finish(),
             Self::Char(c) => c.fmt(f),
             Self::Str(s) => s.fmt(f),
             Self::Int(i) => i.fmt(f),
             Self::Tag(tag) => tag.fmt(f),
             Self::Name(name) => name.fmt(f),
-            Self::Group(expr) => f.debug_tuple("Group").field(&expr.0).finish(),
-            Self::Tuple(exprs) => {
-                let mut t = f.debug_tuple("Tuple");
+            Self::Group(kind, expr) =>
+                f.debug_tuple(&format!("{:?} Group", kind)).field(&expr.0).finish(),
+            Self::Tuple(kind, exprs) => {
+                let mut t = f.debug_tuple(&format!("{:?} Tuple", kind));
                 for expr in &exprs.0 { t.field(expr); }
                 t.finish()
             },
-            Self::TupleType(types) => {
-                let mut t = f.debug_tuple("TupleType");
-                for type_ in &types.0 { t.field(type_); }
-                t.finish()
-            },
-            Self::Structure(word, pattern) => f.debug_tuple("Structure").field(word).field(pattern).finish(),
-            Self::When(expr, tag) => f.debug_tuple("When").field(expr).field(tag).finish(),
-            Self::Dot(expr, selector) => f.debug_tuple("Dot").field(expr).field(selector).finish(),
+            Self::Structure(word, pattern) =>
+                f.debug_tuple("Structure").field(word).field(pattern).finish(),
+            Self::When(expr, tag) =>
+                f.debug_tuple("When").field(expr).field(tag).finish(),
+            Self::Dot(expr, selector) =>
+                f.debug_tuple("Dot").field(expr).field(selector).finish(),
             Self::Op(left, op, right) => {
                 let mut t = f.debug_tuple("Op");
                 if let Some(left) = left { t.field(left); }
@@ -277,7 +288,8 @@ impl std::fmt::Debug for Expr {
                 if let Some(right) = right { t.field(right); }
                 t.finish()
             },
-            Self::Call(function, argument) => f.debug_tuple("Call").field(function).field(argument).finish(),
+            Self::Call(function, argument) =>
+                f.debug_tuple("Call").field(function).field(argument).finish(),
         }
     }
 }
@@ -295,9 +307,8 @@ impl Locate for Expr {
             Self::Int(i) => i.loc_start(),
             Self::Tag(tag) => tag.loc_start(),
             Self::Name(name) => name.loc_start(),
-            Self::Group(expr) => expr.loc_start(),
-            Self::Tuple(exprs) => exprs.loc_start(),
-            Self::TupleType(types) => types.loc_start(),
+            Self::Group(_, expr) => expr.loc_start(),
+            Self::Tuple(_, exprs) => exprs.loc_start(),
             Self::Structure(word, _) => word.loc_start(),
             Self::When(expr, _) => expr.loc_start(),
             Self::Dot(expr, _) => expr.loc_start(),
@@ -325,9 +336,8 @@ impl Locate for Expr {
             Self::Int(i) => i.loc_end(),
             Self::Tag(tag) => tag.loc_end(),
             Self::Name(name) => name.loc_end(),
-            Self::Group(expr) => expr.loc_end(),
-            Self::Tuple(exprs) => exprs.loc_end(),
-            Self::TupleType(types) => types.loc_end(),
+            Self::Group(_, expr) => expr.loc_end(),
+            Self::Tuple(_, exprs) => exprs.loc_end(),
             Self::Structure(_, pattern) => pattern.loc_end(),
             Self::When(_, tag) => tag.loc_end(),
             Self::Dot(_, selector) => selector.loc_end(),
@@ -359,16 +369,10 @@ impl Validate<Formula> for Expr {
     fn validate(tree: &Formula) -> loc::Result<Self> {
         let ret = match tree {
             Formula::Atom(atom) => Self::validate(atom)?,
-            Formula::RoundGroup(bracket) => {
+            Formula::Group(kind, bracket) => {
                 match CommaSeparated::validate(&bracket.0)?.number() {
-                    Number::One(expr) => Self::group(Loc(expr, bracket.1)),
-                    Number::Many(exprs) => Self::tuple(Loc(exprs, bracket.1)),
-                }
-            },
-            Formula::SquareGroup(bracket) => {
-                match CommaSeparated::validate(&bracket.0)?.number() {
-                    Number::One(expr) => Self::group(Loc(expr, bracket.1)),
-                    Number::Many(exprs) => Self::tuple_type(Loc(exprs, bracket.1)),
+                    Number::One(expr) => Self::group(*kind, Loc(expr, bracket.1)),
+                    Number::Many(exprs) => Self::tuple(*kind, Loc(exprs, bracket.1)),
                 }
             },
             Formula::Op(left, op, right) => {
@@ -386,7 +390,7 @@ impl Validate<Formula> for Expr {
                     Op::Structure => {
                         assert!(left.is_none(), "Structure has no left operand");
                         let right = right.expect("Structure has a right operand");
-                        let (name, right) = right.remove_call()?;
+                        let (name, right) = right.remove_call(BracketKind::Round)?;
                         let name = Self::to_optional_name(name)?;
                         let pattern = Pattern::from_expr(right)?;
                         Self::structure(op.1, pattern).named(name)
@@ -405,19 +409,11 @@ impl Validate<Formula> for Expr {
                     },
                 }
             }
-            Formula::RoundCall(function, bracket) => {
+            Formula::Call(kind, function, bracket) => {
                 let function = Expr::validate(&**function)?;
                 let arg = match CommaSeparated::validate(&bracket.0)?.number() {
-                    Number::One(expr) => Self::group(Loc(expr, bracket.1)),
-                    Number::Many(exprs) => Self::tuple(Loc(exprs, bracket.1)),
-                };
-                function.call(arg)
-            }
-            Formula::SquareCall(function, bracket) => {
-                let function = Expr::validate(&**function)?;
-                let arg = match CommaSeparated::validate(&bracket.0)?.number() {
-                    Number::One(expr) => Self::group(Loc(expr, bracket.1)),
-                    Number::Many(exprs) => Self::tuple(Loc(exprs, bracket.1)),
+                    Number::One(expr) => Self::group(*kind, Loc(expr, bracket.1)),
+                    Number::Many(exprs) => Self::tuple(*kind, Loc(exprs, bracket.1)),
                 };
                 function.call(arg)
             }

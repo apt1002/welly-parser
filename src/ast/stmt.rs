@@ -1,7 +1,7 @@
 use std::{fmt};
 
 use super::{enums, loc, parser, Validate, Tag, Expr, Pattern};
-use enums::{Separator, Op, ItemWord};
+use enums::{BracketKind, Separator, Op, ItemWord};
 use loc::{Location, Loc, Locate};
 use parser::{Doc, Item};
 
@@ -180,7 +180,7 @@ impl Validate<Item> for StmtOrElse {
                     },
                     ItemWord::Object => {
                         let Some(expr) = expr else { Err(Loc(MISSING_EXPR, word.1))? };
-                        let (name, expr) = expr.remove_call()?;
+                        let (name, expr) = expr.remove_call(BracketKind::Round)?;
                         let Some(name) = name else { Err(Loc(MISSING_CALL, expr.loc()))? };
                         let name = name.to_name()?;
                         let parameter = Pattern::from_expr(expr)?;
@@ -190,7 +190,7 @@ impl Validate<Item> for StmtOrElse {
                     ItemWord::Function | ItemWord::Macro => {
                         let Some(expr) = expr else { Err(Loc(MISSING_EXPR, word.1))? };
                         let (expr, return_type) = expr.remove_cast();
-                        let (name, expr) = expr.remove_call()?;
+                        let (name, expr) = expr.remove_call(BracketKind::Round)?;
                         let name = Expr::to_optional_name(name)?;
                         let parameter = Pattern::from_expr(expr)?;
                         Stmt::Expr(Expr::function(*word, parameter, return_type, block).named(name))
@@ -217,7 +217,7 @@ impl Validate<Item> for StmtOrElse {
                     },
                     ItemWord::Case => {
                         let Some(expr) = expr else { Err(Loc(MISSING_EXPR, word.1))? };
-                        let (tag, expr) = expr.remove_call()?;
+                        let (tag, expr) = expr.remove_call(BracketKind::Round)?;
                         let Some(tag) = tag else { Err(Loc(MISSING_CALL, expr.loc()))? };
                         let tag = tag.to_tag()?;
                         let parameter = Pattern::from_expr(expr)?;

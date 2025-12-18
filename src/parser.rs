@@ -3,7 +3,7 @@ use std::{fmt};
 use super::loc::{self, Location, Loc, Locate, Report};
 use super::stream::{Stream};
 use super::{enums, lexer};
-use enums::{Separator, BracketKind as BK, Op, Associativity, Precedence, OpInfo, ItemWord};
+use enums::{Separator, BracketKind, Op, Associativity, Precedence, OpInfo, ItemWord};
 use lexer::{Comment, Atom, Lexeme};
 
 pub const MISSING_ITEM: &'static str = "Expected an item";
@@ -13,6 +13,18 @@ pub const MISSING_GROUP: &'static str = "Ambiguous operator precedence; please u
 pub const MISSING_RIGHT: &'static str = "Missing formula after this operator";
 pub const MISSING_OP: &'static str = "Missing operator before this formula";
 
+/// An open bracket does not match a close bracket.
+struct MismatchedBracket {open: Location, close: Location}
+
+impl Report for MismatchedBracket {
+    fn report(&self, log: &mut dyn FnMut(&str, Option<Location>)) {
+        log(MISMATCHED_BRACKET, Some(self.open));
+        log(MISMATCHED_BRACKET, Some(self.close));
+    }
+}
+
+// ----------------------------------------------------------------------------
+
 /// Convenience method for discarding [`Lexeme::Comment`]s.
 fn read_non_comment(input: &mut impl Stream<Item=Loc<Lexeme>>)
 -> loc::Result<Loc<Lexeme>> {
@@ -21,6 +33,9 @@ fn read_non_comment(input: &mut impl Stream<Item=Loc<Lexeme>>)
         if !matches!(&l.0, Lexeme::Comment(_)) { return Ok(l); }
     }
 }
+
+/// Represents a sequence of [`Item`] inside brackets.
+type Bracket = Box<[Doc<Item>]>;
 
 // ----------------------------------------------------------------------------
 
@@ -57,47 +72,13 @@ pub enum Formula {
     Atom(Loc<Atom>),
 
     /// Something enclosed in round brackets.
-    RoundGroup(Loc<Bracket>),
-
-    /// Something enclosed in square brackets.
-    SquareGroup(Loc<Bracket>),
+    Group(BracketKind, Loc<Bracket>),
 
     /// An arithmetic operator applied to up to two arguments.
     Op(Option<Box<Formula>>, Loc<Op>, Option<Box<Formula>>),
 
     /// A `Formula` followed by round brackets.
-    RoundCall(Box<Formula>, Loc<Bracket>),
-
-    /// A `Formula` followed by square brackets.
-    SquareCall(Box<Formula>, Loc<Bracket>),
-}
-
-impl Locate for Formula {
-    /// Used to compute `self.loc().start`.
-    fn loc_start(&self) -> usize {
-        match self {
-            Self::Atom(l) => l.1.start,
-            Self::RoundGroup(l) => l.1.start,
-            Self::SquareGroup(l) => l.1.start,
-            Self::Op(Some(left), _, _) => left.loc_start(),
-            Self::Op(None, l, _) => l.1.start,
-            Self::RoundCall(left, _) => left.loc_start(),
-            Self::SquareCall(left, _) => left.loc_start(),
-        }
-    }
-
-    /// Used to compute `self.loc().end`.
-    fn loc_end(&self) -> usize {
-        match self {
-            Self::Atom(l) => l.1.end,
-            Self::RoundGroup(l) => l.1.end,
-            Self::SquareGroup(l) => l.1.end,
-            Self::Op(_, _, Some(right)) => right.loc_end(),
-            Self::Op(_, l, None) => l.1.end,
-            Self::RoundCall(_, l) => l.1.end,
-            Self::SquareCall(_, l) => l.1.end,
-        }
-    }
+    Call(BracketKind, Box<Formula>, Loc<Bracket>),
 }
 
 impl Formula {
@@ -123,8 +104,7 @@ impl Formula {
                     },
                 }
             },
-            Lexeme::Open(BK::Round) => Self::RoundGroup(parse_bracket(Loc(BK::Round, l.1), input)?),
-            Lexeme::Open(BK::Square) => Self::SquareGroup(parse_bracket(Loc(BK::Square, l.1), input)?),
+            Lexeme::Open(kind) => Self::Group(*kind, parse_bracket(Loc(*kind, l.1), input)?),
             _ => {
                 input.unread(l);
                 return Ok(None);
@@ -149,17 +129,10 @@ impl Formula {
                         },
                     }
                 },
-                Lexeme::Open(BK::Round) => match limit.compare(Precedence::Postfix) {
+                Lexeme::Open(kind) => match limit.compare(Precedence::Postfix) {
                     Associativity::Left => { input.unread(l); return Ok(Some(ret)); },
                     Associativity::Right => {
-                        Self::RoundCall(Box::new(ret), parse_bracket(Loc(BK::Round, l.1), input)?)
-                    },
-                    Associativity::Ambiguous => Err(Loc(MISSING_GROUP, l.1))?,
-                },
-                Lexeme::Open(BK::Square) => match limit.compare(Precedence::Postfix) {
-                    Associativity::Left => { input.unread(l); return Ok(Some(ret)); },
-                    Associativity::Right => {
-                        Self::SquareCall(Box::new(ret), parse_bracket(Loc(BK::Square, l.1), input)?)
+                        Self::Call(*kind, Box::new(ret), parse_bracket(Loc(*kind, l.1), input)?)
                     },
                     Associativity::Ambiguous => Err(Loc(MISSING_GROUP, l.1))?,
                 },
@@ -187,16 +160,8 @@ impl fmt::Debug for Formula {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Atom(atom) => atom.fmt(f),
-            Self::RoundGroup(bracket) => {
-                let mut t = f.debug_tuple("RoundGroup");
-                for item in &bracket.0 { t.field(item); }
-                t.finish()
-            },
-            Self::SquareGroup(bracket) => {
-                let mut t = f.debug_tuple("SquareGroup");
-                for item in &bracket.0 { t.field(item); }
-                t.finish()
-            },
+            Self::Group(kind, bracket) =>
+                f.debug_tuple(&format!("{:?} Group", kind)).field(&bracket.0).finish(),
             Self::Op(left, op, right) => {
                 let mut t = f.debug_tuple("Op");
                 if let Some(left) = left { t.field(left); }
@@ -204,9 +169,55 @@ impl fmt::Debug for Formula {
                 if let Some(right) = right { t.field(right); }
                 t.finish()
             },
-            Self::RoundCall(left, bracket) => f.debug_tuple("RoundCall").field(left).field(bracket).finish(),
-            Self::SquareCall(left, bracket) => f.debug_tuple("SquareCall").field(left).field(bracket).finish(),
+            Self::Call(kind, left, bracket) =>
+                f.debug_tuple(&format!("{:?} Call", kind)).field(left).field(bracket).finish(),
         }
+    }
+}
+
+impl Locate for Formula {
+    /// Used to compute `self.loc().start`.
+    fn loc_start(&self) -> usize {
+        match self {
+            Self::Atom(l) => l.1.start,
+            Self::Group(_, l) => l.1.start,
+            Self::Op(Some(left), _, _) => left.loc_start(),
+            Self::Op(None, l, _) => l.1.start,
+            Self::Call(_, left, _) => left.loc_start(),
+        }
+    }
+
+    /// Used to compute `self.loc().end`.
+    fn loc_end(&self) -> usize {
+        match self {
+            Self::Atom(l) => l.1.end,
+            Self::Group(_, l) => l.1.end,
+            Self::Op(_, _, Some(right)) => right.loc_end(),
+            Self::Op(_, l, None) => l.1.end,
+            Self::Call(_, _, l) => l.1.end,
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+
+/// Parse a [`Bracket`] starting after an open round or square bracket.
+/// - open - the open bracket.
+pub fn parse_bracket(open: Loc<BracketKind>, input: &mut impl Stream<Item=Loc<Lexeme>>)
+-> loc::Result<Loc<Bracket>> {
+    let mut contents = Vec::new();
+    loop {
+        let l = read_non_comment(input)?;
+        match &l.0 {
+            Lexeme::Close(kind) => {
+                if *kind != open.0 { Err(MismatchedBracket {open: open.1, close: l.1})? }
+                let loc = Location {start: open.1.start, end: l.1.end};
+                return Ok(Loc(contents.into(), loc));
+            },
+            Lexeme::CloseCurly => Err(MismatchedBracket {open: open.1, close: l.1})?,
+            _ => { input.unread(l); },
+        }
+        if let Some(item) = Doc::parse(input)? { contents.push(item); }
     }
 }
 
@@ -236,39 +247,13 @@ pub enum Item {
     Block(Loc<Bracket>)
 }
 
-impl Locate for Item {
-    fn loc_start(&self) -> usize {
-        match self {
-            Self::Separator(separator) => separator.loc_start(),
-            Self::Eval(expr) => expr.loc_start(),
-            Self::Assign(Some(pattern), _, _) => pattern.loc_start(),
-            Self::Assign(None, op, _) => op.loc_start(),
-            Self::Verb(word, _, _) => word.loc_start(),
-            Self::Block(block) => block.loc_start(),
-        }
-    }
-
-    fn loc_end(&self) -> usize {
-        match self {
-            Self::Separator(separator) => separator.1.end,
-            Self::Eval(expr) => expr.loc_end(),
-            Self::Assign(_, _, Some(expr)) => expr.loc_end(),
-            Self::Assign(_, op, None) => op.loc_end(),
-            Self::Verb(_, _, Some(block)) => block.loc_end(),
-            Self::Verb(_, Some(expr), None) => expr.loc_end(),
-            Self::Verb(word, None, None) => word.loc_end(),
-            Self::Block(block) => block.loc_end(),
-        }
-    }
-}
-
 impl Item {
     /// Parse a [`Self`].
     pub fn parse(input: &mut impl Stream<Item=Loc<Lexeme>>)
     -> loc::Result<Option<Self>> {
         let l = read_non_comment(input)?;
         let ret: Self = match &l.0 {
-            Lexeme::Atom(_) | Lexeme::Op(_) | Lexeme::Open(BK::Round) | Lexeme::Open(BK::Square) | Lexeme::Assign(_) => {
+            Lexeme::Atom(_) | Lexeme::Op(_) | Lexeme::Open(_) | Lexeme::Assign(_) => {
                 input.unread(l);
                 let lhs = Formula::parse(Precedence::None, input)?;
                 let l = read_non_comment(input)?;
@@ -289,14 +274,14 @@ impl Item {
                 let expr = Formula::parse(Precedence::None, input)?;
                 let l = read_non_comment(input)?;
                 let block = match &l.0 {
-                    Lexeme::Open(BK::Curly) => Some(parse_bracket(Loc(BK::Curly, l.1), input)?),
+                    Lexeme::OpenCurly => Some(parse_curly(l.1, input)?),
                     _ => { input.unread(l); None },
                 };
                 Self::Verb(word, expr, block)
             },
             Lexeme::Separator(sep) => { Self::Separator(Loc(*sep, l.1)) },
-            Lexeme::Open(BK::Curly) => {
-                let block = parse_bracket(Loc(BK::Curly, l.1), input)?;
+            Lexeme::OpenCurly => {
+                let block = parse_curly(l.1, input)?;
                 Self::Block(block)
             },
             _ => {
@@ -339,40 +324,49 @@ impl fmt::Debug for Item {
     }
 }
 
-// ----------------------------------------------------------------------------
+impl Locate for Item {
+    fn loc_start(&self) -> usize {
+        match self {
+            Self::Separator(separator) => separator.loc_start(),
+            Self::Eval(expr) => expr.loc_start(),
+            Self::Assign(Some(pattern), _, _) => pattern.loc_start(),
+            Self::Assign(None, op, _) => op.loc_start(),
+            Self::Verb(word, _, _) => word.loc_start(),
+            Self::Block(block) => block.loc_start(),
+        }
+    }
 
-/// An open bracket does not match a close bracket.
-struct MismatchedBracket {open: Location, close: Location}
-
-impl Report for MismatchedBracket {
-    fn report(&self, log: &mut dyn FnMut(&str, Option<Location>)) {
-        log(MISMATCHED_BRACKET, Some(self.open));
-        log(MISMATCHED_BRACKET, Some(self.close));
+    fn loc_end(&self) -> usize {
+        match self {
+            Self::Separator(separator) => separator.1.end,
+            Self::Eval(expr) => expr.loc_end(),
+            Self::Assign(_, _, Some(expr)) => expr.loc_end(),
+            Self::Assign(_, op, None) => op.loc_end(),
+            Self::Verb(_, _, Some(block)) => block.loc_end(),
+            Self::Verb(_, Some(expr), None) => expr.loc_end(),
+            Self::Verb(word, None, None) => word.loc_end(),
+            Self::Block(block) => block.loc_end(),
+        }
     }
 }
 
-/// Represents a sequence of [`Item`] inside brackets.
-type Bracket = Box<[Doc<Item>]>;
+// ----------------------------------------------------------------------------
 
-/// Parse a [`Bracket`] starting after the open bracket.
+/// Parse a [`Bracket`] starting after an open curly bracket.
 /// - open - the open bracket.
-pub fn parse_bracket(open: Loc<BK>, input: &mut impl Stream<Item=Loc<Lexeme>>)
+pub fn parse_curly(open: Location, input: &mut impl Stream<Item=Loc<Lexeme>>)
 -> loc::Result<Loc<Bracket>> {
     let mut contents = Vec::new();
     loop {
         let l = read_non_comment(input)?;
         match &l.0 {
-            Lexeme::Close(kind) => {
-                if *kind == open.0 {
-                    let loc = Location {start: open.1.start, end: l.1.end};
-                    return Ok(Loc(contents.into(), loc));
-                } else {
-                    Err(MismatchedBracket {open: open.1, close: l.1})?
-                }
+            Lexeme::Close(_) => Err(MismatchedBracket {open, close: l.1})?,
+            Lexeme::CloseCurly => {
+                let loc = Location {start: open.start, end: l.1.end};
+                return Ok(Loc(contents.into(), loc));
             },
-            _ => {},
+            _ => { input.unread(l); },
         }
-        input.unread(l);
-    if let Some(item) = Doc::parse(input)? { contents.push(item); }
+        if let Some(item) = Doc::parse(input)? { contents.push(item); }
     }
 }

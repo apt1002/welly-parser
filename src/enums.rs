@@ -3,7 +3,7 @@ use std::{fmt};
 /// Distinguishes the kinds of bracket.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u8)]
-pub enum BracketKind {Round, Square, Curly}
+pub enum BracketKind {Round, Square}
 
 // ----------------------------------------------------------------------------
 

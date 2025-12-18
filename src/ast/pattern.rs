@@ -1,7 +1,7 @@
 use std::{fmt};
 
 use super::{enums, loc, Validate, Name, Selector, Expr};
-use enums::{Op};
+use enums::{BracketKind, Op};
 use loc::{Loc, Locate};
 
 pub const BAD_PATTERN: &'static str = "This expression is not assignable";
@@ -81,8 +81,9 @@ impl Pattern {
     fn from_expr_mode(expr: Expr, mode: Mode) -> loc::Result<Self> {
         let ret = match expr {
             Expr::Name(name) => Self::Name(mode, name),
-            Expr::Group(expr) => Self::Group(Loc(Box::new(Self::from_expr_mode(*expr.0, mode)?), expr.1)),
-            Expr::Tuple(exprs) => {
+            Expr::Group(BracketKind::Round, expr) =>
+                Self::Group(Loc(Box::new(Self::from_expr_mode(*expr.0, mode)?), expr.1)),
+            Expr::Tuple(BracketKind::Round, exprs) => {
                 let mut patterns = Vec::new();
                 for expr in exprs.0 { patterns.push(Self::from_expr_mode(expr, mode)?); }
                 Self::Tuple(Loc(patterns.into(), exprs.1))
