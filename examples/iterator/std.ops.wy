@@ -1,8 +1,7 @@
 trait Eq[Rhs] {
-    fn eq(&self, &other: Rhs): Bool;
+    fn eq($&self, $&other: Rhs): Bool;
 
-    fn ne(&self, &other: Rhs): Bool {
-        // FIXME are we inheriting source code or compiled code?
+    fn ne($&self, $&other: Rhs): Bool {
         not self.eq(other);
     }
 }
