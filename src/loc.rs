@@ -11,6 +11,18 @@ pub struct Location {
     pub end: usize,
 }
 
+impl Location {
+    /// Tests whether `self` and `other` contain at least one byte in common.
+    pub fn overlaps(&self, other: Location) -> bool {
+        self.start < other.end && self.end > other.start
+    }
+
+    /// Tests whether `self` contains all the bytes in `other`.
+    pub fn contains(&self, other: Location) -> bool {
+        self.start <= other.start && self.end >= other.end
+    }
+}
+
 impl fmt::Debug for Location {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}..{}", self.start, self.end)
