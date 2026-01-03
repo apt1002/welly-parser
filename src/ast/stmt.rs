@@ -1,8 +1,7 @@
 use std::{fmt};
 
-use super::{enums, loc, parser, Validate, Expr, Pattern, RefutablePattern};
+use super::{wm, Location, Loc, Locate, enums, parser, Validate, Expr, Pattern, RefutablePattern};
 use enums::{BracketKind, Separator, Op, ItemWord};
-use loc::{Location, Loc, Locate};
 use parser::{Doc, Item};
 
 pub const MISSING_STMT: &'static str = "Expected a statement";
@@ -142,7 +141,7 @@ impl Locate for Stmt {
 }
 
 impl Validate<Item> for Stmt {
-    fn validate(tree: &Item) -> loc::Result<Self> {
+    fn validate(tree: &Item) -> wm::Result<Self> {
         let ret = match StmtOrElse::validate(tree)? {
             StmtOrElse::Stmt(stmt) => stmt,
             StmtOrElse::Else(word, _) => Err(Loc(EXTRA_ELSE, word))?,
@@ -158,7 +157,7 @@ impl Validate<Item> for Stmt {
 pub enum StmtOrElse { Stmt(Stmt), Else(Location, Loc<Block>) }
 
 impl Validate<Item> for StmtOrElse {
-    fn validate(tree: &Item) -> loc::Result<Self> {
+    fn validate(tree: &Item) -> wm::Result<Self> {
         let ret = match tree {
             Item::Separator(separator) => Err(Loc(MISSING_STMT, separator.loc()))?,
             Item::Eval(formula) => Stmt::Expr(Expr::validate(formula)?),
@@ -257,7 +256,7 @@ impl fmt::Debug for Block {
 }
 
 impl Validate<[Doc<Item>]> for Block {
-    fn validate(tree: &[Doc<Item>]) -> loc::Result<Self> {
+    fn validate(tree: &[Doc<Item>]) -> wm::Result<Self> {
         let mut contents = Vec::new();
         let mut iter = tree.iter();
         while let Some(Doc(item, _)) = iter.next() {

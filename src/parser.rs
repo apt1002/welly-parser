@@ -1,6 +1,6 @@
 use std::{fmt};
 
-use super::loc::{self, Location, Loc, Locate, Report};
+use super::{wm, Location, Loc, Locate, Report};
 use super::stream::{Stream};
 use super::{enums, lexer};
 use enums::{Separator, BracketKind, Op, Associativity, Precedence, OpInfo, ItemWord};
@@ -27,7 +27,7 @@ impl Report for MismatchedBracket {
 
 /// Convenience method for discarding [`Lexeme::Comment`]s.
 fn read_non_comment(input: &mut impl Stream<Item=Loc<Lexeme>>)
--> loc::Result<Loc<Lexeme>> {
+-> wm::Result<Loc<Lexeme>> {
     loop {
         let l = input.read()?;
         if !matches!(&l.0, Lexeme::Comment(_)) { return Ok(l); }
@@ -46,7 +46,7 @@ pub struct Doc<T>(pub T, pub Box<[Loc<Comment>]>);
 impl Doc<Item> {
     /// Parse a [`Item`] preceded by zero or more [`Comment`]s.
     pub fn parse(input: &mut impl Stream<Item=Loc<Lexeme>>)
-    -> loc::Result<Option<Self>> {
+    -> wm::Result<Option<Self>> {
         let mut docs = Vec::new();
         loop {
             let l = input.read()?;
@@ -87,7 +87,7 @@ impl Formula {
     ///
     /// Use `Precedence::None` for `limit` to parse a complete `Self`.
     pub fn parse(limit: Precedence, input: &mut impl Stream<Item=Loc<Lexeme>>)
-    -> loc::Result<Option<Self>> {
+    -> wm::Result<Option<Self>> {
         // Parse an initial [`Self`].
         let l = read_non_comment(input)?;
         let mut ret = match &l.0 {
@@ -147,7 +147,7 @@ impl Formula {
     /// Given an optional left operand, an operator, and its right
     /// [`Precedence`] (if any) Parse the right operand (if any).
     fn parse_operand(left: Option<Self>, op: Loc<Op>, precedence: Precedence, input: &mut impl Stream<Item=Loc<Lexeme>>)
-    -> loc::Result<Self> {
+    -> wm::Result<Self> {
         let right = match precedence {
             Precedence::None | Precedence::Postfix => None,
             _ => Some(Self::parse(precedence, input)?.ok_or(Loc(MISSING_RIGHT, op.1))?)
@@ -204,7 +204,7 @@ impl Locate for Formula {
 /// Parse an [`ItemList`] starting after an open round or square bracket.
 /// - open - the open bracket.
 pub fn parse_bracket(open: Loc<BracketKind>, input: &mut impl Stream<Item=Loc<Lexeme>>)
--> loc::Result<Loc<ItemList>> {
+-> wm::Result<Loc<ItemList>> {
     let mut contents = Vec::new();
     loop {
         let l = read_non_comment(input)?;
@@ -250,7 +250,7 @@ pub enum Item {
 impl Item {
     /// Parse a [`Self`].
     pub fn parse(input: &mut impl Stream<Item=Loc<Lexeme>>)
-    -> loc::Result<Option<Self>> {
+    -> wm::Result<Option<Self>> {
         let l = read_non_comment(input)?;
         let ret: Self = match &l.0 {
             Lexeme::Atom(_) | Lexeme::Op(_) | Lexeme::Open(_) | Lexeme::Assign(_) => {
@@ -355,7 +355,7 @@ impl Locate for Item {
 /// Parse a [`ItemList`] starting after an open curly bracket.
 /// - open - the open bracket.
 pub fn parse_curly(open: Location, input: &mut impl Stream<Item=Loc<Lexeme>>)
--> loc::Result<Loc<ItemList>> {
+-> wm::Result<Loc<ItemList>> {
     let mut contents = Vec::new();
     loop {
         let l = read_non_comment(input)?;

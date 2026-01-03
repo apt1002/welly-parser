@@ -1,9 +1,8 @@
 use std::{fmt};
 use std::rc::{Rc};
 
-use super::{enums, loc, parser, lexer, Validate, Name, Tag, Pattern, Stmt, Block};
+use super::{wm, Location, Loc, Locate, enums, parser, lexer, Validate, Name, Tag, Pattern, Stmt, Block};
 use enums::{BracketKind, Separator, Op, ItemWord};
-use loc::{Location, Loc, Locate};
 use parser::{Doc, Formula, Item};
 use lexer::{Atom};
 
@@ -29,7 +28,7 @@ pub enum Selector {
 
 impl Selector {
     /// Checks that `expr` is a valid [`Selector`].
-    fn from_expr(expr: Expr) -> loc::Result<Loc<Self>> {
+    fn from_expr(expr: Expr) -> wm::Result<Loc<Self>> {
         let ret = match expr {
             Expr::Name(name) => name.map(Self::Name),
             Expr::Int(index) => index.map(Self::Index),
@@ -135,7 +134,7 @@ impl Expr {
     /// Optionally wrap `self` in `Self::Named.
     ///
     /// `self` must be `None`, `Some(name)` or `Some(name[arg])`.
-    pub fn named(self, name: impl Into<Option<Expr>>) -> loc::Result<Self> {
+    pub fn named(self, name: impl Into<Option<Expr>>) -> wm::Result<Self> {
         let Some(name) = name.into() else { return Ok(self); };
         let (name, arg) = Self::remove_argument(name, BracketKind::Square);
         let Expr::Name(name) = name else { Err(Loc(BAD_NAME, name.loc()))? };
@@ -195,7 +194,7 @@ impl Expr {
     }
 
     /// Checks that `self` is of the form `pattern in sequence`.
-    pub fn remove_in(self) -> loc::Result<(Pattern, Expr)> {
+    pub fn remove_in(self) -> wm::Result<(Pattern, Expr)> {
         let ret = match self {
             Expr::Op(Some(pattern), Loc(Op::In, _), Some(sequence)) => (Pattern::from_expr(*pattern)?, *sequence),
             expr => Err(Loc(BAD_IN, expr.loc()))?,
@@ -337,7 +336,7 @@ impl Locate for Expr {
 }
 
 impl Validate<Loc<Atom>> for Expr {
-    fn validate(tree: &Loc<Atom>) -> loc::Result<Self> {
+    fn validate(tree: &Loc<Atom>) -> wm::Result<Self> {
         let ret = match &tree.0 {
             Atom::CharLiteral(c) => Self::Char(Loc(*c, tree.1)),
             Atom::StrLiteral(s) => Self::Str(Loc(s.clone(), tree.1)),
@@ -354,7 +353,7 @@ impl Validate<Loc<Atom>> for Expr {
 }
 
 impl Validate<Formula> for Expr {
-    fn validate(tree: &Formula) -> loc::Result<Self> {
+    fn validate(tree: &Formula) -> wm::Result<Self> {
         let ret = match tree {
             Formula::Atom(atom) => Self::validate(atom)?,
             Formula::Bracket(kind, bracket) => {
@@ -411,11 +410,11 @@ impl Validate<Formula> for Expr {
 }
 
 impl Validate<Box<Formula>> for Expr {
-    fn validate(tree: &Box<Formula>) -> loc::Result<Self> { Ok(Self::validate(&**tree)?) }
+    fn validate(tree: &Box<Formula>) -> wm::Result<Self> { Ok(Self::validate(&**tree)?) }
 }
 
 impl Validate<Item> for Expr {
-    fn validate(tree: &Item) -> loc::Result<Self> {
+    fn validate(tree: &Item) -> wm::Result<Self> {
         let ret = match Stmt::validate(tree)? {
             Stmt::Expr(expr) => expr,
             s => { Err(Loc(STMT_NOT_EXPR, s.loc()))? },
@@ -425,7 +424,7 @@ impl Validate<Item> for Expr {
 }
 
 impl Validate<Doc<Item>> for Expr {
-    fn validate(tree: &Doc<Item>) -> loc::Result<Self> { Ok(Self::validate(&tree.0)?) }
+    fn validate(tree: &Doc<Item>) -> wm::Result<Self> { Ok(Self::validate(&tree.0)?) }
 }
 
 // ----------------------------------------------------------------------------
@@ -451,7 +450,7 @@ impl CommaSeparated {
 }
 
 impl Validate<[Doc<Item>]> for CommaSeparated {
-    fn validate(tree: &[Doc<Item>]) -> loc::Result<Self> {
+    fn validate(tree: &[Doc<Item>]) -> wm::Result<Self> {
         let mut contents = Vec::new();
         let mut has_comma = true;
         let mut iter = tree.iter();

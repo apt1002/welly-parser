@@ -12,4 +12,4 @@ categories = ["compilers", "parsing"]
 edition = "2024"
 
 [dependencies]
-ansi_term = "=0.12.1"
+welly-main = {path = "/home/apt1002/welly-main"}

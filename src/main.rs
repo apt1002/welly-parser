@@ -2,8 +2,8 @@ use std::{io};
 use io::{BufRead, Write};
 use ansi_term::Colour::{Red, Blue};
 
-use welly_parser::{loc, stream, lexer, parser, ast};
-use loc::{Location, Loc};
+use welly_main::{self as wm, ansi_term, Location, Loc};
+use welly_parser::{stream, lexer, parser, ast};
 use stream::{Stream, IteratorStream, CharIterator};
 use lexer::{Lexer};
 use parser::{Doc, Item};
@@ -39,7 +39,7 @@ pub fn report(output: &mut impl Write, source: Loc<&str>, msg: &str, loc: Option
 /// Lex, parse, validate and execute `command`.
 /// - history_len - the total length in bytes of the command history.
 pub fn run(output: &mut impl Write, lexer: &Lexer, command: Loc<&str>)
--> loc::Result<()> {
+-> wm::Result<()> {
     // Lex.
     let mut lexemes = Vec::new();
     let mut char_stream = IteratorStream::from(CharIterator::new(command));
@@ -87,7 +87,7 @@ pub fn echo<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> io::Result<(
                 command.clear();
             },
             Err(e) => {
-                if is_complete || !matches!(e, loc::Error::InsufficientInput) {
+                if is_complete || !matches!(e, wm::Error::InsufficientInput) {
                     e.report(|msg, loc| report(output, loc_command, msg, loc));
                     command.clear();
                 }

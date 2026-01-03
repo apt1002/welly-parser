@@ -1,8 +1,7 @@
 use std::{fmt};
 
-use super::{enums, loc, Validate, Name, Tag, Selector, Expr};
+use super::{wm, Location, Loc, Locate, enums, Validate, Name, Tag, Selector, Expr};
 use enums::{BracketKind, Op};
-use loc::{Location, Loc, Locate};
 
 pub const BAD_PATTERN: &'static str = "This expression is not assignable";
 pub const MISSING_CALL: &'static str = "Expected `expression( ... )`";
@@ -78,12 +77,12 @@ pub enum Pattern {
 
 impl Pattern {
     /// Check that `expr` is a `Pattern`.
-    pub fn from_expr(expr: Expr) -> loc::Result<Self> { Self::from_expr_mode(expr, Mode::Mut) }
+    pub fn from_expr(expr: Expr) -> wm::Result<Self> { Self::from_expr_mode(expr, Mode::Mut) }
 
     /// The recursive part of `from_expr`.
     ///
     /// - mode - the mode that will be applied to any names in `expr`.
-    fn from_expr_mode(expr: Expr, mode: Mode) -> loc::Result<Self> {
+    fn from_expr_mode(expr: Expr, mode: Mode) -> wm::Result<Self> {
         let ret = match expr {
             Expr::Name(name) => Self::Name(mode, name),
             Expr::Group(BracketKind::Round, expr) =>
@@ -156,7 +155,7 @@ impl Locate for Pattern {
 }
 
 impl<T> Validate<T> for Pattern where Expr: Validate<T> {
-    fn validate(tree: &T) -> loc::Result<Self> { Ok(Self::from_expr(Expr::validate(tree)?)?) }
+    fn validate(tree: &T) -> wm::Result<Self> { Ok(Self::from_expr(Expr::validate(tree)?)?) }
 }
 
 // ----------------------------------------------------------------------------
@@ -166,7 +165,7 @@ impl<T> Validate<T> for Pattern where Expr: Validate<T> {
 pub struct TaggedPattern(pub Loc<Tag>, pub Pattern);
 
 impl TaggedPattern {
-    pub fn from_expr(expr: Expr) -> loc::Result<Self> {
+    pub fn from_expr(expr: Expr) -> wm::Result<Self> {
         let expr_loc = expr.loc();
         let (function, argument) = expr.remove_argument(BracketKind::Round);
         let Some(argument) = argument else { Err(Loc(MISSING_CALL, expr_loc))? };
@@ -193,7 +192,7 @@ pub enum RefutablePattern {
 }
 
 impl RefutablePattern {
-    pub fn from_expr(mut expr: Expr) -> loc::Result<Self> {
+    pub fn from_expr(mut expr: Expr) -> wm::Result<Self> {
         if let Expr::Name(name) = expr { return Ok(Self::Anything(name)); }
         let mut exprs = Vec::new();
         while let Expr::Op(Some(head), Loc(Op::Union, _), Some(tail)) = expr {
